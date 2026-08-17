@@ -1,0 +1,167 @@
+#include 'fw-tlpp-core.th'
+#include "protheus.ch"
+#include "totvs.framework.structure.model.th"
+#include "totvs.framework.structure.Interface.th"
+
+namespace custom.cti.zc1a001
+
+/*/{Protheus.doc} Model
+    Model Smart X da rotina ZC1A001 - Referência de Conector por Finalidade.
+    Manutenção CRUD simples da tabela customizada ZC1, sem regra de negócio
+    complexa. Entidade única (ZC1), sem relacionamentos 1:1/1:N.
+
+    Particularidade: o campo ZC1_CONECT (Id do conector escolhido na
+    IntegrationPlatform) e o campo ZC1_CONNM (nome do conector, cache de
+    exibição) são preenchidos automaticamente através de um gatilho no
+    onChange do campo ZC1_CATEG (ver método addConnectorTrigger). A busca
+    real do conector em tempo de execução, contra a API REST externa da
+    IntegrationPlatform, ainda NÃO está implementada - ver função ponte
+    buscaConector() neste mesmo namespace.
+    @type Class
+    @author pivetorogerio@gmail.com
+    @since 17/08/2026
+/*/
+@totvsFrameworkStructureModel(lookup=.F., country="ALL", description="Referência de Conector por Finalidade")
+
+Class Model From totvs.framework.structure.model.data
+    Public Method new() As Object
+    Public Method setModel()
+    Public Method addConnectorTrigger()
+EndClass
+
+/*/{Protheus.doc} new
+    Construtor do Model ZC1A001.
+    @type Method
+    @author pivetorogerio@gmail.com
+    @since 17/08/2026
+    @return Object, instância do Model
+/*/
+Method new() As Object Class Model
+    _Super:new(,,.t.)
+Return Self
+
+/*/{Protheus.doc} setModel
+    Define a entidade principal do Model (ZC1) a partir do dicionário de
+    dados e as redefinições de propriedade necessárias que não vêm do SX3
+    padrão. Os campos obrigatórios (ZC1_CODIGO, ZC1_DESC, ZC1_CATEG,
+    ZC1_CONECT) já são tratados automaticamente pelo dicionário (SX3), por
+    isso não são redeclarados aqui via addRequired.
+    @type Method
+    @author pivetorogerio@gmail.com
+    @since 17/08/2026
+/*/
+Method setModel() Class Model
+    Local oZC1 as Object
+
+    // Objeto principal a partir do dicionário de dados (chave: filial + código)
+    oZC1 := totvs.framework.structure.object.ObjectFromMetadata():new("ZC1",, {"ZC1_FILIAL", "ZC1_CODIGO"})
+    Self:setObject(oZC1:getObject(), "ZC1")
+
+    // ZC1_CONNM é cache de exibição (nome do conector) preenchido
+    // automaticamente pelo gatilho de busca de conector - não deve ser
+    // digitado diretamente pelo usuário.
+    Self:setProperty("ZC1_CONNM", "readOnly", .T., "ZC1")
+
+    // Registra o gatilho (trigger) de busca de conector - ver método abaixo
+    Self:addConnectorTrigger()
+
+    FwFreeObj(oZC1)
+Return
+
+/*/{Protheus.doc} addConnectorTrigger
+    PONTO DE EXTENSÃO Smart X - busca de conector na IntegrationPlatform.
+
+    Registra um gatilho (trigger) de onChange no campo ZC1_CATEG (categoria
+    da finalidade, ex.: "whatsapp") nos formulários de inclusão e edição.
+    Quando o usuário altera a categoria, a Interface chama a função ponte
+    buscaConector() (User Function, mesmo namespace deste Model) através de
+    BuildAdvplAction; a resposta (JSON) é usada para preencher
+    automaticamente os campos ZC1_CONECT (Id do conector) e ZC1_CONNM (nome
+    do conector) via BuildSetFieldsAction.
+
+    A função buscaConector() ainda é apenas um stub (ver abaixo) - quando a
+    função U_CTIBUSCACON for desenvolvida (responsável por abrir a busca em
+    tempo real de conectores na API REST da IntegrationPlatform e permitir a
+    seleção pelo usuário), ela deverá ser chamada de dentro de
+    buscaConector(), sem necessidade de alterar este método.
+    @type Method
+    @author pivetorogerio@gmail.com
+    @since 17/08/2026
+/*/
+Method addConnectorTrigger() Class Model
+    Local oFieldConect as Object
+    Local oFieldConnm  as Object
+    Local oSetFields   as Object
+    Local oAdvplAction as Object
+    Local oEvents      as Object
+
+    // Campo alvo 1: Id do conector (ZC1_CONECT), preenchido pela resposta da ponte
+    oFieldConect := totvs.framework.structure.interface.BuildTargetFieldStructure():new()
+    oFieldConect:setIdentifier("ZC1_CONECT")
+    oFieldConect:setValue("{{$response.ZC1_CONECT}}")
+
+    // Campo alvo 2: nome do conector (ZC1_CONNM), cache de exibição
+    oFieldConnm := totvs.framework.structure.interface.BuildTargetFieldStructure():new()
+    oFieldConnm:setIdentifier("ZC1_CONNM")
+    oFieldConnm:setValue("{{$response.ZC1_CONNM}}")
+
+    oSetFields := totvs.framework.structure.interface.BuildSetFieldsAction():new()
+    oSetFields:setLabel("preencheConector")
+    oSetFields:setIdentifier("preencheConector")
+    oSetFields:addTargetField(oFieldConect:getStructure())
+    oSetFields:addTargetField(oFieldConnm:getStructure())
+
+    // TODO(integração pendente): quando U_CTIBUSCACON existir, nenhuma
+    // alteração é necessária aqui - basta implementar a chamada dentro da
+    // função buscaConector() (abaixo), mantendo o contrato de retorno JSON
+    // com as chaves ZC1_CONECT e ZC1_CONNM.
+    oAdvplAction := totvs.framework.structure.interface.BuildAdvplAction():new()
+    oAdvplAction:setLabel("Buscar Conector")
+    oAdvplAction:setRoutine("custom.cti.zc1a001.buscaConector")
+    oAdvplAction:setParams({"{{$model.ZC1_CATEG}}"})
+    oAdvplAction:setHasResponse(.T.)
+    oAdvplAction:setAction(oSetFields:getAction())
+
+    oEvents := totvs.framework.structure.interface.BuildEvents():new()
+    oEvents:addOnChange({"dataNew", "dataEdit"}, {"ZC1_CATEG"}, oAdvplAction:getAction())
+
+    Self:addTriggers(oEvents:getEvents())
+Return
+
+/*/{Protheus.doc} buscaConector
+    FUNÇÃO PONTE (bridge) - AINDA NÃO IMPLEMENTADA.
+
+    Chamada pelo evento onChange de ZC1_CATEG (ver addConnectorTrigger,
+    acima) através de BuildAdvplAction. Recebe a categoria informada em
+    ZC1_CATEG e deve devolver um JSON (em formato string) com o Id e o nome
+    do conector escolhido, para que o Smart X preencha automaticamente
+    ZC1_CONECT e ZC1_CONNM no formulário.
+
+    Contrato futuro esperado (quando U_CTIBUSCACON estiver implementada):
+    1) Chamar U_CTIBUSCACON(cCategoria) - função ADVPL ainda não
+       desenvolvida - responsável por buscar em tempo real, na API REST da
+       IntegrationPlatform, os conectores disponíveis para a categoria
+       informada, exibir a seleção ao usuário (ex.: tela de busca/lista) e
+       devolver o Id e o nome do conector escolhido.
+    2) Repassar o retorno de U_CTIBUSCACON como o JSON de resposta desta
+       função, no formato:
+       '{"ZC1_CONECT": <Id numérico do conector>, "ZC1_CONNM": "<nome do conector>"}'
+
+    Enquanto U_CTIBUSCACON não existir, esta função apenas devolve um JSON
+    vazio (nenhum campo é alterado), para não quebrar a interface.
+    @type Function
+    @author pivetorogerio@gmail.com
+    @since 17/08/2026
+    @param cCategoria, character, categoria informada em ZC1_CATEG (ex.: "whatsapp")
+    @return character, JSON string com ZC1_CONECT/ZC1_CONNM
+/*/
+User Function buscaConector(cCategoria)
+    Local cJson as Character
+
+    // TODO: substituir pelo chamado real quando U_CTIBUSCACON estiver pronta, ex.:
+    // If Type("U_CTIBUSCACON") == "U"
+    //     Return U_CTIBUSCACON(cCategoria)
+    // EndIf
+
+    cJson := '{"ZC1_CONECT": "", "ZC1_CONNM": ""}'
+Return cJson

@@ -62,11 +62,13 @@ mesma categoria de problema que a política de cobrança (ZB1) do projeto irmão
 ```
 central-integracoes/
   Classes/
-    IntegrationPlatformClient.prw   → classe TLPP, cliente REST único da API
+    IntegrationPlatformClient.tlpp  → classe TLPP, cliente REST único da API
   Central de Integracoes/
     CENTINTEG.prw                   → tela dinâmica (categoria→provedor→credencial→salvar)
   Cadastros/
-    ZC1CAD.prw                      → Smart X (model/interface/launcher) de manutenção da ZC1
+    ZC1A001.model.tlpp              → Smart X — model
+    ZC1A001.interface.tlpp          → Smart X — interface
+    ZC1A001.tlpp                    → Smart X — launcher (User Function ZC1A001)
   Dicionario/
     UPDZC1.prw                      → compatibilizador (cria SX2/SX3/SIX da ZC1)
   docs/superpowers/specs/           → specs de design (este arquivo)
@@ -181,12 +183,15 @@ futuras (ex: Régua de Cobrança sabe qual conector WhatsApp usar pela finalidad
 > IntegrationPlatform, que é a fonte da verdade. ZC1 existe só pro Protheus saber
 > "qual conector usar pra qual finalidade".
 
-### Tela de manutenção ZC1 (`ZC1CAD`)
+### Tela de manutenção ZC1 (`ZC1A001`)
 
 Smart X simples (browse + cadastro): campos fixos, sem a limitação de runtime que
-descartou o Smart X na tela principal. O combo de conector consulta
-`GetActiveConnectors()` (client-side, filtrando por `ZC1_CATEG` se preenchida) na hora
-de montar a tela, e grava o nome escolhido em `ZC1_CONNM` como cache de exibição.
+descartou o Smart X na tela principal. Namespace `custom.cti.zc1a001`, seguindo o
+padrão oficial de Model/Interface genéricos (referência: exemplo `FINA050SM` da
+documentação TOTVS). `ZC1_CONNM` é somente-leitura no Model — preenchido via gatilho
+`onChange` de `ZC1_CATEG`, que chama uma função-ponte (`custom.cti.zc1a001.buscaConector`)
+hoje com stub, documentada como ponto de extensão para quando a função `U_CTIBUSCACON`
+(busca real de conectores via `GetActiveConnectors()`) existir.
 
 ## Integração ao menu
 
