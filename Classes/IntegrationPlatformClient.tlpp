@@ -1,0 +1,266 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.cti
+
+/*/{Protheus.doc} IntegrationPlatformClient
+Cliente REST unico para a API da IntegrationPlatform. Resolve URL base e
+X-Api-Key a partir dos parametros ZZ_CTIURL/ZZ_CTIKEY (por filial) e expõe um
+metodo por operação usada pela Central de Integrações (CENTINTEG) e pela
+manutenção de referência de conector (ZC1A001).
+
+Todo endpoint da IntegrationPlatform responde no mesmo envelope
+{ "message": "...", "data": <payload>, "errors": ..., "pagination": ... }
+(confirmado em Archon.Api.Controllers.ApiControllerBase, 2026-08-17) — por
+isso ::DoRequest() sempre tenta interpretar o corpo como esse envelope, tanto
+em sucesso quanto em erro, e ::cLastError vem do campo "message" quando a
+chamada falha.
+
+@type Classe
+@author Central de Integrações
+@since 17/08/2026
+/*/
+Class IntegrationPlatformClient
+
+    Private Data cBaseUrl  as Character
+    Private Data cApiKey   as Character
+    Public  Data cLastError as Character
+
+    Public Method New() Constructor
+
+    Public Method GetActiveCategories() as Array
+    Public Method GetIntegrationsByCategory(nCategoryId as Numeric) as Array
+    Public Method GetAttributesByIntegration(nIntegrationId as Numeric) as Array
+    Public Method GetActiveConnectors() as Array
+    Public Method CreateConnector(nIntegrationId as Numeric, cName as Character, cSystemApplicationId as Character) as Numeric
+    Public Method UpdateConnector(nConnectorId as Numeric, nIntegrationId as Numeric, cName as Character, lActive as Logical) as Logical
+    Public Method SaveConnectorAttributeValue(nConnectorId as Numeric, nIntegrationAttributeId as Numeric, cValue as Character, nExistingValueId as Numeric) as Logical
+    Public Method GetConnectorAttributeValuesByConnector(nConnectorId as Numeric) as Array
+
+    Private Method DoRequest(cVerb as Character, cPath as Character, cBody as Character) as Object
+
+EndClass
+
+/*/{Protheus.doc} New
+Le ZZ_CTIURL (URL base) e ZZ_CTIKEY (X-Api-Key) da filial corrente.
+/*/
+Method New() Class IntegrationPlatformClient
+    ::cBaseUrl   := AllTrim(SuperGetMV("ZZ_CTIURL", .F., ""))
+    ::cApiKey    := AllTrim(SuperGetMV("ZZ_CTIKEY", .F., ""))
+    ::cLastError := ""
+Return Self
+
+/*/{Protheus.doc} GetActiveCategories
+Categorias ativas na IntegrationPlatform (GET /api/integrationcategories/active).
+Cada item do array retornado responde a :GetJsonText("id"/"identifier"/"name"/"description"/"isActive").
+
+@return array, categorias ativas (vazio em caso de falha - ver ::cLastError)
+/*/
+Method GetActiveCategories() Class IntegrationPlatformClient
+    Local oResp := ::DoRequest("GET", "/api/integrationcategories/active", "")
+    Local aRet  := {}
+    If oResp != Nil
+        aRet := oResp:GetJsonObject("data")
+    EndIf
+Return aRet
+
+/*/{Protheus.doc} GetIntegrationsByCategory
+Provedores (integrations) de uma categoria (GET /api/integrations/category/{id}).
+Cada item responde a :GetJsonText("id"/"identifier"/"name"/"description"/"isActive").
+
+@param nCategoryId, numerico, Id da categoria (retornado por GetActiveCategories)
+@return array, provedores da categoria
+/*/
+Method GetIntegrationsByCategory(nCategoryId) Class IntegrationPlatformClient
+    Local oResp := ::DoRequest("GET", "/api/integrations/category/" + cValToChar(nCategoryId), "")
+    Local aRet  := {}
+    If oResp != Nil
+        aRet := oResp:GetJsonObject("data")
+    EndIf
+Return aRet
+
+/*/{Protheus.doc} GetAttributesByIntegration
+Atributos (campos de credencial) de um provedor (GET /api/integrationattributes/integration/{id}).
+Cada item responde a :GetJsonText("id"/"field"/"label"/"description"/"placeholder"/
+"type"/"defaultValue"/"group") e :GetJsonValue("isRequired"/"isSensitive"/"isHidden").
+"type" é o FieldType numerico (1=Texto,2=TextoLongo,3=Numero,4=Decimal,5=Logico,
+6=Data,7=DataHora,8=Lista,9=Arquivo).
+
+@param nIntegrationId, numerico, Id do provedor (retornado por GetIntegrationsByCategory)
+@return array, atributos do provedor, na ordem "order" que a API já devolve
+/*/
+Method GetAttributesByIntegration(nIntegrationId) Class IntegrationPlatformClient
+    Local oResp := ::DoRequest("GET", "/api/integrationattributes/integration/" + cValToChar(nIntegrationId), "")
+    Local aRet  := {}
+    If oResp != Nil
+        aRet := oResp:GetJsonObject("data")
+    EndIf
+Return aRet
+
+/*/{Protheus.doc} GetActiveConnectors
+Conectores ativos (qualquer categoria/provedor) - GET /api/connectors/active.
+Usado pela tela ZC1A001 para vincular uma finalidade a um conector já cadastrado.
+
+@return array, conectores ativos
+/*/
+Method GetActiveConnectors() Class IntegrationPlatformClient
+    Local oResp := ::DoRequest("GET", "/api/connectors/active", "")
+    Local aRet  := {}
+    If oResp != Nil
+        aRet := oResp:GetJsonObject("data")
+    EndIf
+Return aRet
+
+/*/{Protheus.doc} CreateConnector
+Cria um conector (POST /api/connectors).
+
+@param nIntegrationId, numerico, Id do provedor escolhido
+@param cName, caracter, nome do conector (2 a 200 caracteres, obrigatorio na API)
+@param cSystemApplicationId, caracter, opcional
+@return numerico, Id do conector criado, ou 0 em caso de falha (ver ::cLastError)
+/*/
+Method CreateConnector(nIntegrationId, cName, cSystemApplicationId) Class IntegrationPlatformClient
+    Local oJson := JsonObject():New()
+    Local oResp
+    Local nId   := 0
+
+    Default cSystemApplicationId := ""
+
+    oJson["integrationId"] := nIntegrationId
+    oJson["name"]          := cName
+    If !Empty(cSystemApplicationId)
+        oJson["systemApplicationId"] := cSystemApplicationId
+    EndIf
+
+    oResp := ::DoRequest("POST", "/api/connectors", oJson:ToJson())
+
+    If oResp != Nil
+        nId := Val(oResp:GetJsonObject("data"):GetJsonText("id"))
+    EndIf
+Return nId
+
+/*/{Protheus.doc} UpdateConnector
+Atualiza um conector existente (PUT /api/connectors/{id}).
+
+@param nConnectorId, numerico, Id do conector (obrigatorio)
+@param nIntegrationId, numerico, Id do provedor
+@param cName, caracter, nome do conector
+@param lActive, logico, ativo/inativo
+@return logico, sucesso (ver ::cLastError em caso de falha)
+/*/
+Method UpdateConnector(nConnectorId, nIntegrationId, cName, lActive) Class IntegrationPlatformClient
+    Local oJson := JsonObject():New()
+    Local oResp
+
+    oJson["id"]            := nConnectorId
+    oJson["integrationId"] := nIntegrationId
+    oJson["name"]          := cName
+    oJson["isActive"]      := lActive
+
+    oResp := ::DoRequest("PUT", "/api/connectors/" + cValToChar(nConnectorId), oJson:ToJson())
+Return (oResp != Nil)
+
+/*/{Protheus.doc} SaveConnectorAttributeValue
+Grava o valor de um atributo de credencial. Se nExistingValueId > 0, atualiza
+(PUT /api/connectorattributevalues/{id}); senão, cria (POST /api/connectorattributevalues).
+Chamado uma vez por atributo preenchido no formulario - atributos vazios e
+não obrigatórios simplesmente não são enviados.
+
+@param nConnectorId, numerico, Id do conector (usado só na criação)
+@param nIntegrationAttributeId, numerico, Id do atributo (IntegrationAttribute)
+@param cValue, caracter, valor preenchido pelo usuario (sempre string, igual ao frontend React)
+@param nExistingValueId, numerico, Id do ConnectorAttributeValue já existente (0 = criar novo)
+@return logico, sucesso (ver ::cLastError em caso de falha)
+/*/
+Method SaveConnectorAttributeValue(nConnectorId, nIntegrationAttributeId, cValue, nExistingValueId) Class IntegrationPlatformClient
+    Local oJson := JsonObject():New()
+    Local oResp
+
+    Default nExistingValueId := 0
+
+    If nExistingValueId > 0
+        oJson["id"]                     := nExistingValueId
+        oJson["integrationAttributeId"] := nIntegrationAttributeId
+        oJson["value"]                  := cValue
+        oResp := ::DoRequest("PUT", "/api/connectorattributevalues/" + cValToChar(nExistingValueId), oJson:ToJson())
+    Else
+        oJson["connectorId"]            := nConnectorId
+        oJson["integrationAttributeId"] := nIntegrationAttributeId
+        oJson["value"]                  := cValue
+        oResp := ::DoRequest("POST", "/api/connectorattributevalues", oJson:ToJson())
+    EndIf
+Return (oResp != Nil)
+
+/*/{Protheus.doc} GetConnectorAttributeValuesByConnector
+Valores de atributo já gravados para um conector (GET /api/connectorattributevalues/connector/{id}).
+Usado para pré-carregar o formulario na edição. Cada item responde a
+:GetJsonText("id"/"integrationAttributeId"/"value").
+
+@param nConnectorId, numerico, Id do conector
+@return array, valores gravados
+/*/
+Method GetConnectorAttributeValuesByConnector(nConnectorId) Class IntegrationPlatformClient
+    Local oResp := ::DoRequest("GET", "/api/connectorattributevalues/connector/" + cValToChar(nConnectorId), "")
+    Local aRet  := {}
+    If oResp != Nil
+        aRet := oResp:GetJsonObject("data")
+    EndIf
+Return aRet
+
+/*/{Protheus.doc} DoRequest
+Monta e dispara a chamada HTTP, interpreta o envelope {message,data,errors,pagination}.
+Em falha (erro de comunicação, HTTP fora de 2xx, ou corpo que não é o envelope
+esperado), retorna Nil e preenche ::cLastError. NOTA DE VERIFICAÇÃO (task 2,
+passo de smoke test): confirmar contra a API real se o retorno logico de
+oRest:Get()/Post()/Put() já reflete corretamente 2xx vs 4xx/5xx, e se
+oRest:cResult é de fato a propriedade correta de corpo de resposta da classe
+FWRest nesta versão de Protheus - ajustar aqui se o smoke test mostrar
+comportamento diferente.
+
+@param cVerb, caracter, "GET"/"POST"/"PUT"
+@param cPath, caracter, caminho relativo (ex: "/api/connectors/active")
+@param cBody, caracter, corpo JSON (vazio para GET)
+@return objeto JsonObject com o envelope de resposta, ou Nil em falha
+/*/
+Method DoRequest(cVerb, cPath, cBody) Class IntegrationPlatformClient
+    Local oRest   := FWRest():New(::cBaseUrl)
+    Local aHeader := {}
+    Local lOk     := .F.
+    Local oResp   := JsonObject():New()
+
+    aAdd(aHeader, "X-Api-Key: " + ::cApiKey)
+    aAdd(aHeader, "Content-Type: application/json")
+    aAdd(aHeader, "Accept: application/json")
+
+    oRest:SetPath(cPath)
+
+    Do Case
+    Case Upper(cVerb) == "GET"
+        lOk := oRest:Get(aHeader)
+    Case Upper(cVerb) == "POST"
+        oRest:SetPostParams(cBody)
+        lOk := oRest:Post(aHeader)
+    Case Upper(cVerb) == "PUT"
+        oRest:SetPostParams(cBody)
+        lOk := oRest:Put(aHeader)
+    EndCase
+
+    ::cLastError := ""
+
+    If lOk .And. !Empty(oRest:cResult)
+        If oResp:FromJson(oRest:cResult) == Nil
+            Return oResp
+        Else
+            ::cLastError := "Falha ao interpretar a resposta da IntegrationPlatform"
+            Return Nil
+        EndIf
+    EndIf
+
+    If !Empty(oRest:cResult) .And. oResp:FromJson(oRest:cResult) == Nil
+        ::cLastError := oResp:GetJsonText("message")
+    EndIf
+
+    If Empty(::cLastError)
+        ::cLastError := "Falha de comunicação com a IntegrationPlatform (verifique ZZ_CTIURL/ZZ_CTIKEY)"
+    EndIf
+Return Nil
