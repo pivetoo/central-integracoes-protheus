@@ -70,7 +70,7 @@ central-integracoes/
     ZC1A001.interface.tlpp          → Smart X — interface
     ZC1A001.tlpp                    → Smart X — launcher (User Function ZC1A001)
   Dicionario/
-    UPDZC1.prw                      → compatibilizador (cria SX2/SX3/SIX da ZC1)
+    ZC1-campos.md                   → referência de campos p/ cadastro manual via Configurador
   docs/superpowers/specs/           → specs de design (este arquivo)
   README.md
 ```
