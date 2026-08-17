@@ -1,0 +1,32 @@
+# Protheus / AdvPL
+*.apo
+*.APO
+*.ppo
+*.PPO
+*.rpo
+*.RPO
+*.log
+*.LOG
+
+# IDEs
+.vscode/
+.idea/
+.metadata/
+.settings/
+
+# macOS
+.DS_Store
+._*
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Temporários
+*.tmp
+*.bak
+*.backup
+
+# Credenciais locais (nunca commitar)
+.local/
+*.env
