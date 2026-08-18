@@ -30,3 +30,6 @@ Desktop.ini
 # Credenciais locais (nunca commitar)
 .local/
 *.env
+
+# Documentacao interna (fica so local)
+docs/
