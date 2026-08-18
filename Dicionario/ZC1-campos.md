@@ -21,9 +21,12 @@ integração (ex: `cobranca-whatsapp` → conector Twilio).
 
 No Configurador, o campo **Picture** aparece com o rótulo **"Formato"**.
 
+`ZC1_FILIAL` acompanha o tamanho de filial do ambiente — 2 posições aqui, o mesmo
+de `A1_FILIAL`/`B1_FILIAL`. Confira no ambiente de destino antes de cadastrar.
+
 | Campo | Tipo | Tam. | Dec. | Título | Descrição | Obrigat. | Browse | Formato | Combo |
 |---|---|---|---|---|---|---|---|---|---|
-| ZC1_FILIAL | C | 8 | - | Filial | Filial do sistema (preenchida automaticamente) | N | N | - | - |
+| ZC1_FILIAL | C | 2 | - | Filial | Filial do sistema (preenchida automaticamente) | N | N | - | - |
 | ZC1_CODIGO | C | 15 | - | Código | Código da finalidade de integração (ex: `cobranca-whatsapp`) | S | S | - | - |
 | ZC1_DESC | C | 60 | - | Descrição | Descrição da finalidade de integração | S | S | - | - |
 | ZC1_CATEG | C | 30 | - | Categoria | Identificador da categoria na IntegrationPlatform (ex: `whatsapp`) | S | S | - | - |
