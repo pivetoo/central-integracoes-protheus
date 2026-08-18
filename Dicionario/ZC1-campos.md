@@ -19,15 +19,21 @@ integração (ex: `cobranca-whatsapp` → conector Twilio).
 
 ## SX3 — Campos
 
-| Campo | Tipo | Tam. | Dec. | Título | Descrição | Obrigat. | Browse | Picture/Válido | Combo |
+No Configurador, o campo **Picture** aparece com o rótulo **"Formato"**.
+
+| Campo | Tipo | Tam. | Dec. | Título | Descrição | Obrigat. | Browse | Formato | Combo |
 |---|---|---|---|---|---|---|---|---|---|
 | ZC1_FILIAL | C | 8 | - | Filial | Filial do sistema (preenchida automaticamente) | N | N | - | - |
-| ZC1_CODIGO | C | 15 | - | Código | Código da finalidade de integração (ex: `cobranca-whatsapp`) | S | S | Válido: `NaoVazio()` | - |
-| ZC1_DESC | C | 60 | - | Descrição | Descrição da finalidade de integração | S | S | Válido: `NaoVazio()` | - |
-| ZC1_CATEG | C | 30 | - | Categoria | Identificador da categoria na IntegrationPlatform (ex: `whatsapp`) | S | S | Válido: `NaoVazio()` | - |
-| ZC1_CONECT | N | 15 | 0 | Cod Conector | Id do conector selecionado na IntegrationPlatform | S | N | Picture: `999999999999999`, Válido: `NaoVazio()` | - |
+| ZC1_CODIGO | C | 15 | - | Código | Código da finalidade de integração (ex: `cobranca-whatsapp`) | S | S | - | - |
+| ZC1_DESC | C | 60 | - | Descrição | Descrição da finalidade de integração | S | S | - | - |
+| ZC1_CATEG | C | 30 | - | Categoria | Identificador da categoria na IntegrationPlatform (ex: `whatsapp`) | S | S | - | - |
+| ZC1_CONECT | N | 15 | 0 | Cod Conector | Id do conector selecionado na IntegrationPlatform | S | N | `999999999999999` | - |
 | ZC1_CONNM | C | 60 | - | Nom Conector | Nome do conector (cache de exibição, evita chamada à API) | N | N | - | - |
-| ZC1_ATIVO | C | 1 | - | Ativo | Indica se a finalidade está ativa | N | S | Picture: `@!`, Válido: `Pertence('SN')` | `S=Sim;N=Nao` |
+| ZC1_ATIVO | C | 1 | - | Ativo | Indica se a finalidade está ativa | N | S | `@!` | `S=Sim;N=Nao` |
+
+Validação (`X3_VALID`) fica vazia em todos: a flag Obrigatório já barra o campo em
+branco, e o combo já restringe o `ZC1_ATIVO` a S/N. Expressões ADVPL de validação
+nem sempre são avaliadas no Smart X, que é o caso desta tela.
 
 Atenção ao cadastrar: **ZC1_CODIGO e ZC1_CATEG não levam picture `@!`**
 (que forçaria maiúsculas) — ambos precisam bater exatamente com
