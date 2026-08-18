@@ -64,7 +64,7 @@ central-integracoes/
   Classes/
     IntegrationPlatformClient.tlpp  → classe TLPP, cliente REST único da API
   Central de Integracoes/
-    CENTINTEG.prw                   → tela dinâmica (categoria→provedor→credencial→salvar)
+    CENTINTEG.tlpp                  → tela dinâmica (categoria→provedor→credencial→salvar)
   Cadastros/
     ZC1A001.model.tlpp              → Smart X — model
     ZC1A001.interface.tlpp          → Smart X — interface
@@ -120,19 +120,38 @@ um job em background.
 
 ## Tela Central de Integrações (`CENTINTEG`)
 
-Fluxo (idêntico ao já validado na fase de brainstorming):
+Implementada em dois diálogos, decisão tomada na implementação: o diálogo 1 só tem
+widgets fixos, então usa sintaxe de tempo de compilação (`@ ... COMBOBOX`), que é o
+caminho batido e de baixo risco; **só o formulário de credencial é montado
+dinamicamente**, reduzindo a superfície da parte arriscada.
+
+Diálogo 1 — seleção:
 
 1. Combo de categoria, populado via `GetActiveCategories()`.
-2. Ao escolher categoria, combo de integração/provedor recarrega via
+2. Ao escolher categoria, combo de provedor recarrega via
    `GetIntegrationsByCategory(nCategoryId)`.
-3. Ao escolher provedor, busca os atributos via `GetAttributesByIntegration(nIntegrationId)`
-   e monta o formulário dinamicamente.
-4. Salvar: `CreateConnector()` (campos `IntegrationId`, `Name`, `SystemApplicationId`
-   opcional) e, pra cada atributo preenchido, `SaveConnectorAttributeValue()`
-   (`ConnectorId`, `IntegrationAttributeId`, `Value` — tudo string, igual ao frontend
-   React já faz).
-5. Editar um conector existente: mesmo fluxo com `UpdateConnector()`, valores
-   pré-carregados via `GetConnectorAttributeValuesByConnector()`.
+3. Ao escolher provedor, combo de conector recarrega via
+   `GetConnectorsByIntegration(nIntegrationId)`, com `<Novo conector>` na primeira
+   posição — escolher um conector existente é o que liga o modo de edição.
+4. Nome do conector (`TGet`), preenchido automaticamente ao escolher um existente.
+
+Diálogo 2 — credencial (dinâmico):
+
+5. `GetAttributesByIntegration(nIntegrationId)` e um widget por atributo, conforme o
+   `FieldType`. Atributos com `isHidden` não entram. Na edição, os valores vêm
+   pré-carregados de `GetConnectorAttributeValuesByConnector()`.
+6. Salvar: `CreateConnector()` (ou `UpdateConnector()` na edição) e, pra cada atributo
+   preenchido, `SaveConnectorAttributeValue()` — tudo string, igual ao frontend React.
+   Atributo vazio não é enviado, porque a API rejeita `Value` em branco.
+
+Dois detalhes de implementação que não são óbvios e custam caro se esquecidos:
+
+- Os campos são criados **dentro do `bInit`** do diálogo. `TGet` instanciado antes da
+  janela existir em memória não renderiza.
+- Cada bloco `bSetGet` é produzido por uma função auxiliar (`ValueBlock(aValues, nIdx)`),
+  não inline no laço. Codeblock em ADVPL captura o *local* por referência de
+  armazenamento — inline, todos os campos acabariam apontando para o índice da última
+  iteração. Cada chamada da auxiliar cria um armazenamento próprio.
 
 ### Mapeamento de tipo de campo (`FieldType`, confirmado em
 `IntegrationPlatform.Domain.ValueObjects.FieldType` — Text=1, LongText=2, Number=3,
@@ -141,26 +160,29 @@ Decimal=4, Boolean=5, Date=6, DateTime=7, List=8, File=9)
 | FieldType (enum) | Widget ADVPL |
 |---|---|
 | `Text` (1) | `TGet` texto |
-| `LongText` (2) | `TGet` multilinha / `TMultiGet` |
+| `LongText` (2) | `TGet` texto (largo) |
 | `Number` (3) | `TGet` numérico |
 | `Decimal` (4) | `TGet` numérico com casas decimais |
 | `Boolean` (5) | `TCheckBox` |
 | `Date` (6) | `TGet` com picture de data |
-| `DateTime` (7) | `TGet` data + hora |
+| `DateTime` (7) | `TGet` texto |
 | `List` (8) | `TGet` texto (mesma simplificação que o frontend React já usa — lista separada por vírgula) |
 | `File` (9) | botão que abre `cGetFile()`, converte pra base64 antes do POST |
 
-Campo sensível (`IsSensitive` ou nome contendo `senha/token/key/secret`) → `TGet` com
-`PASSWORD .T.`. Agrupamento por `Group` → seções sequenciais no dialog, mesma ordem que
-a API retorna.
+`LongText` ficou em `TGet` largo em vez de `TMultiGet`: com o compilador indisponível
+pra validar, preferi restringir a superfície aos widgets clássicos de assinatura
+conhecida. Trocar por `TMultiGet` depois é local, mexe só em `BuildOne()`.
+
+Campo sensível (`isSensitive`) → `TGet` com `lPassword`. Valor é convertido pra string
+na gravação conforme o tipo (`true`/`false` para lógico, ISO `YYYY-MM-DD` para data,
+base64 do conteúdo para arquivo).
 
 ### Formulário de altura variável
 
 O número de atributos varia bastante por provedor (de poucos campos a mais de uma
-dezena). O painel do formulário tem altura dinâmica calculada pelo número de campos,
-com um teto fixo; passado esse teto, os campos ficam dentro de um `TScrollBox` para
-rolagem — evita diálogo gigante ou campos cortados fora da tela em provedores com mais
-atributos.
+dezena). Os campos ficam sempre dentro de um `TScrollBox`, cuja altura é calculada pelo
+número de campos com um teto fixo (`FORM_MAXH`) — passado o teto, rola. Evita diálogo
+gigante ou campos cortados fora da tela.
 
 ## ZC1 — Referência de Conector por Finalidade
 
@@ -195,7 +217,7 @@ hoje com stub, documentada como ponto de extensão para quando a função `U_CTI
 
 ## Integração ao menu
 
-Entrega como `User Function` isolada (`CENTINTEG`, `ZC1CAD`); a inclusão da opção no
+Entrega como `User Function` isolada (`CENTINTEG`, `ZC1A001`); a inclusão da opção no
 menu (Configurador → Ambiente → Cadastro → Menu) é feita manualmente no ambiente de
 destino — não altero tabela de menu ativa como parte deste projeto.
 
@@ -206,3 +228,15 @@ manual: exercitar o fluxo completo (categoria → provedor → formulário → s
 contra uma instância real da IntegrationPlatform, cobrindo pelo menos um provedor de
 cada `FieldType` presente no catálogo atual (ex: WhatsApp Cloud tem token — sensível;
 SMTP tem porta — numérico; assinatura digital tem certificado — arquivo).
+
+### Pontos que a primeira compilação precisa validar
+
+Nada aqui passou pelo compilador ainda. Dois trechos foram escritos a partir de
+documentação, não de verificação direta, e estão marcados com `TODO` no fonte:
+
+- `IntegrationPlatformClient:DoRequest()` — se o retorno lógico de
+  `FWRest:Get/Post/Put` já distingue 2xx de 4xx/5xx, e se `cResult` é mesmo a
+  propriedade do corpo da resposta nesta build.
+- `CENTINTEG:BuildOne()` — posição de `lPixel` nos construtores de `TCheckBox` e
+  `TButton`, e a propriedade `oGet:lPassword`. `TGet` (com `lPixel` na posição 14),
+  `TSay` e `TScrollBox` seguem assinatura conferida na documentação.
