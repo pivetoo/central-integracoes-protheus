@@ -17,12 +17,14 @@ Class IntegrationPlatformClient
     Public Method GetIntegrationsByCategory(nCategoryId as Numeric) as Array
     Public Method GetAttributesByIntegration(nIntegrationId as Numeric) as Array
     Public Method GetActiveConnectors() as Array
+    Public Method GetConnectorsByIntegration(nIntegrationId as Numeric) as Array
     Public Method CreateConnector(nIntegrationId as Numeric, cName as Character, cSystemApplicationId as Character) as Numeric
     Public Method UpdateConnector(nConnectorId as Numeric, nIntegrationId as Numeric, cName as Character, lActive as Logical) as Logical
     Public Method SaveConnectorAttributeValue(nConnectorId as Numeric, nIntegrationAttributeId as Numeric, cValue as Character, nExistingValueId as Numeric) as Logical
     Public Method GetConnectorAttributeValuesByConnector(nConnectorId as Numeric) as Array
 
     Private Method DoRequest(cVerb as Character, cPath as Character, cBody as Character) as Object
+    Private Method GetData(cVerb as Character, cPath as Character) as Array
 
 EndClass
 
@@ -34,47 +36,36 @@ Return Self
 
 // GET /api/integrationcategories/active
 Method GetActiveCategories() Class IntegrationPlatformClient
-    Local oResp := ::DoRequest("GET", "/api/integrationcategories/active", "")
-    Local aRet  := {}
-    If oResp != Nil
-        aRet := oResp:GetJsonObject("data")
-    EndIf
-Return aRet
+Return ::GetData("GET", "/api/integrationcategories/active")
 
 // GET /api/integrations/category/{id}
 Method GetIntegrationsByCategory(nCategoryId) Class IntegrationPlatformClient
-    Local oResp := ::DoRequest("GET", "/api/integrations/category/" + cValToChar(nCategoryId), "")
-    Local aRet  := {}
-    If oResp != Nil
-        aRet := oResp:GetJsonObject("data")
-    EndIf
-Return aRet
+Return ::GetData("GET", "/api/integrations/category/" + cValToChar(nCategoryId))
 
 // GET /api/integrationattributes/integration/{id}
 // "type" e o FieldType numerico: 1=Texto 2=TextoLongo 3=Numero 4=Decimal
 // 5=Logico 6=Data 7=DataHora 8=Lista 9=Arquivo
 Method GetAttributesByIntegration(nIntegrationId) Class IntegrationPlatformClient
-    Local oResp := ::DoRequest("GET", "/api/integrationattributes/integration/" + cValToChar(nIntegrationId), "")
-    Local aRet  := {}
-    If oResp != Nil
-        aRet := oResp:GetJsonObject("data")
-    EndIf
-Return aRet
+Return ::GetData("GET", "/api/integrationattributes/integration/" + cValToChar(nIntegrationId))
 
 // GET /api/connectors/active
 Method GetActiveConnectors() Class IntegrationPlatformClient
-    Local oResp := ::DoRequest("GET", "/api/connectors/active", "")
-    Local aRet  := {}
-    If oResp != Nil
-        aRet := oResp:GetJsonObject("data")
-    EndIf
-Return aRet
+Return ::GetData("GET", "/api/connectors/active")
+
+// GET /api/connectors/integration/{id}
+Method GetConnectorsByIntegration(nIntegrationId) Class IntegrationPlatformClient
+Return ::GetData("GET", "/api/connectors/integration/" + cValToChar(nIntegrationId))
+
+// GET /api/connectorattributevalues/connector/{id} - pre-carrega o form na edicao
+Method GetConnectorAttributeValuesByConnector(nConnectorId) Class IntegrationPlatformClient
+Return ::GetData("GET", "/api/connectorattributevalues/connector/" + cValToChar(nConnectorId))
 
 // POST /api/connectors -> Id criado, ou 0 em falha (::cLastError)
 Method CreateConnector(nIntegrationId, cName, cSystemApplicationId) Class IntegrationPlatformClient
     Local oJson := JsonObject():New()
     Local oResp
-    Local nId   := 0
+    Local oData
+    Local nId := 0
 
     Default cSystemApplicationId := ""
 
@@ -86,22 +77,22 @@ Method CreateConnector(nIntegrationId, cName, cSystemApplicationId) Class Integr
 
     oResp := ::DoRequest("POST", "/api/connectors", oJson:ToJson())
     If oResp != Nil
-        nId := Val(oResp:GetJsonObject("data"):GetJsonText("id"))
+        oData := oResp["data"]
+        If oData != Nil
+            nId := oData["id"]
+        EndIf
     EndIf
 Return nId
 
 // PUT /api/connectors/{id}
 Method UpdateConnector(nConnectorId, nIntegrationId, cName, lActive) Class IntegrationPlatformClient
     Local oJson := JsonObject():New()
-    Local oResp
 
     oJson["id"]            := nConnectorId
     oJson["integrationId"] := nIntegrationId
     oJson["name"]          := cName
     oJson["isActive"]      := lActive
-
-    oResp := ::DoRequest("PUT", "/api/connectors/" + cValToChar(nConnectorId), oJson:ToJson())
-Return (oResp != Nil)
+Return (::DoRequest("PUT", "/api/connectors/" + cValToChar(nConnectorId), oJson:ToJson()) != Nil)
 
 Method SaveConnectorAttributeValue(nConnectorId, nIntegrationAttributeId, cValue, nExistingValueId) Class IntegrationPlatformClient
     Local oJson := JsonObject():New()
@@ -122,12 +113,13 @@ Method SaveConnectorAttributeValue(nConnectorId, nIntegrationAttributeId, cValue
     EndIf
 Return (oResp != Nil)
 
-// GET /api/connectorattributevalues/connector/{id} - pre-carrega o form na edicao
-Method GetConnectorAttributeValuesByConnector(nConnectorId) Class IntegrationPlatformClient
-    Local oResp := ::DoRequest("GET", "/api/connectorattributevalues/connector/" + cValToChar(nConnectorId), "")
+// Extrai o "data" do envelope; array vazio em falha (motivo em ::cLastError)
+Method GetData(cVerb, cPath) Class IntegrationPlatformClient
+    Local oResp := ::DoRequest(cVerb, cPath, "")
     Local aRet  := {}
-    If oResp != Nil
-        aRet := oResp:GetJsonObject("data")
+
+    If oResp != Nil .And. oResp["data"] != Nil
+        aRet := oResp["data"]
     EndIf
 Return aRet
 
@@ -162,10 +154,9 @@ Method DoRequest(cVerb, cPath, cBody) Class IntegrationPlatformClient
     If lOk .And. !Empty(oRest:cResult)
         If oResp:FromJson(oRest:cResult) == Nil
             Return oResp
-        Else
-            ::cLastError := "Falha ao interpretar a resposta da IntegrationPlatform"
-            Return Nil
         EndIf
+        ::cLastError := "Falha ao interpretar a resposta da IntegrationPlatform"
+        Return Nil
     EndIf
 
     If !Empty(oRest:cResult) .And. oResp:FromJson(oRest:cResult) == Nil

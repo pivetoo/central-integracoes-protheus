@@ -1,0 +1,456 @@
+#include "tlpp-core.th"
+#include "protheus.ch"
+#include "fileio.ch"
+
+namespace custom.cti
+
+// FieldType da IntegrationPlatform (IntegrationPlatform.Domain.ValueObjects.FieldType)
+#define FT_TEXT      1
+#define FT_LONGTEXT  2
+#define FT_NUMBER    3
+#define FT_DECIMAL   4
+#define FT_BOOLEAN   5
+#define FT_DATE      6
+#define FT_DATETIME  7
+#define FT_LIST      8
+#define FT_FILE      9
+
+// Colunas de aFields
+#define FLD_ID     1
+#define FLD_NAME   2
+#define FLD_LABEL  3
+#define FLD_TYPE   4
+#define FLD_REQ    5
+#define FLD_SENS   6
+#define FLD_VALUEID  7
+
+#define ROW_H     16
+#define FORM_MAXH 260
+
+/*
+Central de Integracoes - cadastro de conector na IntegrationPlatform.
+
+Tela 1 (widgets fixos, sintaxe classica): categoria -> provedor -> conector
+existente (opcional, habilita edicao) -> nome.
+Tela 2 (montada em runtime): um campo por atributo do provedor, com o widget
+definido pelo FieldType que a API devolve. Os campos sao criados dentro do
+bInit do dialogo - TGet criado antes da tela existir em memoria nao renderiza.
+*/
+User Function CENTINTEG()
+    Local oClient   := custom.cti.IntegrationPlatformClient():New()
+    Local aCategs   := {}
+    Local aCategNm  := {}
+    Local aProvs    := {}
+    Local aProvNm   := {}
+    Local aConns    := {}
+    Local aConnNm   := {"<Novo conector>"}
+    Local cCategSel := ""
+    Local cProvSel  := ""
+    Local cConnSel  := "<Novo conector>"
+    Local cConnName := Space(100)
+    Local oDlg, oCbCateg, oCbProv, oCbConn, oGetNome
+    Local nI := 0
+
+    aCategs := oClient:GetActiveCategories()
+    If Len(aCategs) == 0
+        MsgAlert(oClient:cLastError, "Central de Integracoes")
+        Return
+    EndIf
+
+    For nI := 1 To Len(aCategs)
+        aAdd(aCategNm, JText(aCategs[nI], "name"))
+    Next nI
+    cCategSel := aCategNm[1]
+
+    DEFINE MSDIALOG oDlg TITLE "Central de Integracoes" FROM 0,0 TO 190,460 PIXEL
+
+    @ 012,010 SAY "Categoria:"        SIZE 060,008 OF oDlg PIXEL
+    @ 010,075 COMBOBOX oCbCateg VAR cCategSel ITEMS aCategNm SIZE 150,010 OF oDlg PIXEL ;
+        ON CHANGE ( LoadProviders(oClient, aCategs, cCategSel, aProvs, aProvNm, oCbProv), ;
+                    cProvSel := IIf(Len(aProvNm) > 0, aProvNm[1], ""), ;
+                    LoadConnectors(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn), ;
+                    cConnSel := aConnNm[1] )
+
+    @ 032,010 SAY "Provedor:"         SIZE 060,008 OF oDlg PIXEL
+    @ 030,075 COMBOBOX oCbProv VAR cProvSel ITEMS aProvNm SIZE 150,010 OF oDlg PIXEL ;
+        ON CHANGE ( LoadConnectors(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn), ;
+                    cConnSel := aConnNm[1] )
+
+    @ 052,010 SAY "Conector:"         SIZE 060,008 OF oDlg PIXEL
+    @ 050,075 COMBOBOX oCbConn VAR cConnSel ITEMS aConnNm SIZE 150,010 OF oDlg PIXEL ;
+        ON CHANGE ( cConnName := PadR(ConnNameOf(aConns, aConnNm, cConnSel), 100) )
+
+    @ 072,010 SAY "Nome do conector:" SIZE 060,008 OF oDlg PIXEL
+    @ 070,075 GET oGetNome VAR cConnName SIZE 150,010 OF oDlg PIXEL
+
+    @ 095,075 BUTTON "Credenciais..." SIZE 070,013 OF oDlg PIXEL ;
+        ACTION OpenCred(oClient, aProvs, aProvNm, cProvSel, aConns, aConnNm, cConnSel, cConnName)
+
+    @ 095,150 BUTTON "Fechar"         SIZE 070,013 OF oDlg PIXEL ACTION oDlg:End()
+
+    ACTIVATE MSDIALOG oDlg CENTERED ON INIT ( ;
+        LoadProviders(oClient, aCategs, cCategSel, aProvs, aProvNm, oCbProv), ;
+        cProvSel := IIf(Len(aProvNm) > 0, aProvNm[1], ""), ;
+        oCbProv:Refresh(), ;
+        LoadConnectors(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn) )
+Return
+
+// Recarrega o combo de provedores conforme a categoria escolhida.
+// Preenche aProvs/aProvNm por mutacao: reatribuir o parametro trocaria so o
+// local desta funcao e o chamador ficaria com a lista antiga.
+Static Function LoadProviders(oClient, aCategs, cCategSel, aProvs, aProvNm, oCbProv)
+    Local nPos := aScan(aCategs, {|o| JText(o, "name") == cCategSel})
+    Local aTmp := {}
+    Local nI   := 0
+
+    aSize(aProvs, 0)
+    aSize(aProvNm, 0)
+
+    If nPos > 0
+        aTmp := oClient:GetIntegrationsByCategory(JNum(aCategs[nPos], "id"))
+        For nI := 1 To Len(aTmp)
+            aAdd(aProvs, aTmp[nI])
+            aAdd(aProvNm, JText(aTmp[nI], "name"))
+        Next nI
+    EndIf
+
+    If oCbProv != Nil
+        oCbProv:aItems := aProvNm
+        oCbProv:Refresh()
+    EndIf
+Return Nil
+
+// Recarrega o combo de conectores ja cadastrados no provedor escolhido
+Static Function LoadConnectors(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn)
+    Local nPos := aScan(aProvNm, {|c| c == cProvSel})
+    Local aTmp := {}
+    Local nI   := 0
+
+    aSize(aConns, 0)
+    aSize(aConnNm, 0)
+    aAdd(aConnNm, "<Novo conector>")
+
+    If nPos > 0 .And. nPos <= Len(aProvs)
+        aTmp := oClient:GetConnectorsByIntegration(JNum(aProvs[nPos], "id"))
+        For nI := 1 To Len(aTmp)
+            aAdd(aConns, aTmp[nI])
+            aAdd(aConnNm, JText(aTmp[nI], "name"))
+        Next nI
+    EndIf
+
+    If oCbConn != Nil
+        oCbConn:aItems := aConnNm
+        oCbConn:Refresh()
+    EndIf
+Return Nil
+
+Static Function ConnNameOf(aConns, aConnNm, cConnSel)
+    Local nPos := aScan(aConnNm, {|c| c == cConnSel})
+    Local cRet := ""
+
+    // posicao 1 e "<Novo conector>", por isso o -1
+    If nPos > 1 .And. (nPos - 1) <= Len(aConns)
+        cRet := JText(aConns[nPos - 1], "name")
+    EndIf
+Return cRet
+
+// Monta o formulario de credencial do provedor e grava o resultado
+Static Function OpenCred(oClient, aProvs, aProvNm, cProvSel, aConns, aConnNm, cConnSel, cConnName)
+    Local nPos     := aScan(aProvNm, {|c| c == cProvSel})
+    Local nConnPos := aScan(aConnNm, {|c| c == cConnSel})
+    Local nIntegId := 0
+    Local nConnId  := 0
+    Local aAttrs   := {}
+    Local aFields  := {}
+    Local aValues  := {}
+    Local aExist   := {}
+    Local aResult  := {.F.}
+    Local aObjs    := {}
+    Local nPanelH  := 0
+    Local oDlg
+    Local nI, oAttr, nType, nValId, uInit, cVal
+
+    If nPos <= 0 .Or. nPos > Len(aProvs)
+        MsgAlert("Escolha um provedor.", "Central de Integracoes")
+        Return Nil
+    EndIf
+
+    If Empty(AllTrim(cConnName))
+        MsgAlert("Informe o nome do conector.", "Central de Integracoes")
+        Return Nil
+    EndIf
+
+    nIntegId := JNum(aProvs[nPos], "id")
+
+    If nConnPos > 1 .And. (nConnPos - 1) <= Len(aConns)
+        nConnId := JNum(aConns[nConnPos - 1], "id")
+        aExist  := oClient:GetConnectorAttributeValuesByConnector(nConnId)
+    EndIf
+
+    aAttrs := oClient:GetAttributesByIntegration(nIntegId)
+    If Len(aAttrs) == 0
+        MsgAlert("Provedor sem atributos de credencial. " + oClient:cLastError, "Central de Integracoes")
+        Return Nil
+    EndIf
+
+    For nI := 1 To Len(aAttrs)
+        oAttr := aAttrs[nI]
+        If JBool(oAttr, "isHidden")
+            Loop
+        EndIf
+
+        nType  := JNum(oAttr, "type")
+        nValId := 0
+        cVal   := ""
+        ExistingValue(aExist, JNum(oAttr, "id"), @nValId, @cVal)
+        If Empty(cVal)
+            cVal := JText(oAttr, "defaultValue")
+        EndIf
+        uInit := InitValue(nType, cVal)
+
+        aAdd(aFields, {JNum(oAttr, "id"), ;
+                       JText(oAttr, "field"), ;
+                       JText(oAttr, "label"), ;
+                       nType, ;
+                       JBool(oAttr, "isRequired"), ;
+                       JBool(oAttr, "isSensitive"), ;
+                       nValId})
+        aAdd(aValues, uInit)
+    Next nI
+
+    nPanelH := Min(Len(aFields) * ROW_H + 8, FORM_MAXH)
+
+    DEFINE MSDIALOG oDlg TITLE "Credenciais - " + AllTrim(cProvSel) FROM 0,0 TO nPanelH + 58, 440 PIXEL
+
+    @ nPanelH + 20, 120 BUTTON "Salvar"   SIZE 060,013 OF oDlg PIXEL ;
+        ACTION ( IIf(ValidForm(aFields, aValues), (aResult[1] := .T., oDlg:End()), Nil) )
+    @ nPanelH + 20, 190 BUTTON "Cancelar" SIZE 060,013 OF oDlg PIXEL ACTION oDlg:End()
+
+    ACTIVATE MSDIALOG oDlg CENTERED ON INIT BuildFields(oDlg, aFields, aValues, aObjs, nPanelH)
+
+    If aResult[1]
+        If SaveAll(oClient, nIntegId, AllTrim(cConnName), nConnId, aFields, aValues)
+            MsgInfo("Conector gravado na IntegrationPlatform.", "Central de Integracoes")
+        EndIf
+    EndIf
+Return Nil
+
+// Cria um widget por atributo dentro do scroll. Chamado no bInit do dialogo.
+Static Function BuildFields(oDlg, aFields, aValues, aObjs, nPanelH)
+    Local oScroll := TScrollBox():New(oDlg, 005, 005, nPanelH, 425, .T., .F., .T.)
+    Local nRow    := 4
+    Local nI      := 0
+
+    For nI := 1 To Len(aFields)
+        BuildOne(oScroll, aFields[nI], aValues, nI, nRow, aObjs)
+        nRow += ROW_H
+    Next nI
+Return Nil
+
+// TODO 1a compilacao: TGet (lPixel na 14) e TSay seguem assinatura conferida,
+// mas a posicao de lPixel em TCheckBox/TButton e a propriedade oGet:lPassword
+// nao foram validadas contra esta build - ajustar aqui se a tela nao renderizar.
+Static Function BuildOne(oParent, aField, aValues, nIdx, nRow, aObjs)
+    Local cLabel := aField[FLD_LABEL] + IIf(aField[FLD_REQ], " *", "")
+    Local nType  := aField[FLD_TYPE]
+    Local bGet   := ValueBlock(aValues, nIdx)
+    Local oSay, oObj
+
+    oSay := TSay():New(nRow + 1, 005, {|| cLabel }, oParent, , , , , , .T., CLR_BLACK, , 130, 010)
+    aAdd(aObjs, oSay)
+
+    Do Case
+    Case nType == FT_BOOLEAN
+        oObj := TCheckBox():New(nRow, 140, "", bGet, oParent, 020, 010, , , , , , , , .T.)
+
+    Case nType == FT_FILE
+        oSay := TSay():New(nRow + 1, 205, {|| FileLabel(aValues, nIdx) }, oParent, , , , , , .T., CLR_BLUE, , 210, 010)
+        oObj := TButton():New(nRow, 140, "Selecionar...", oParent, FileBlock(aValues, nIdx, oSay), 060, 011, , , , .T.)
+        aAdd(aObjs, oSay)
+
+    Otherwise
+        oObj := TGet():New(nRow, 140, bGet, oParent, 275, 010, FieldPict(nType), , , , , , , .T.)
+        If aField[FLD_SENS]
+            oObj:lPassword := .T.
+        EndIf
+    EndCase
+
+    aAdd(aObjs, oObj)
+Return Nil
+
+// Cada bloco nasce numa chamada propria para nao compartilhar o nIdx do laco
+Static Function ValueBlock(aValues, nIdx)
+Return {|u| IIf(PCount() > 0, aValues[nIdx] := u, aValues[nIdx])}
+
+Static Function FileBlock(aValues, nIdx, oSay)
+Return {|| PickFile(aValues, nIdx, oSay)}
+
+Static Function PickFile(aValues, nIdx, oSay)
+    Local cFile := cGetFile("Todos os arquivos (*.*) |*.*", "Selecione o arquivo")
+
+    If !Empty(cFile)
+        aValues[nIdx] := cFile
+        oSay:SetText(FileLabel(aValues, nIdx))
+    EndIf
+Return Nil
+
+Static Function FileLabel(aValues, nIdx)
+    Local cPath := aValues[nIdx]
+Return IIf(Empty(cPath), "(nenhum arquivo)", SubStr(cPath, RAt("\", cPath) + 1))
+
+Static Function FieldPict(nType)
+    Local cPict := ""
+
+    Do Case
+    Case nType == FT_NUMBER
+        cPict := "@E 999999999999"
+    Case nType == FT_DECIMAL
+        cPict := "@E 999999999.99"
+    Case nType == FT_DATE
+        cPict := "@D"
+    EndCase
+Return cPict
+
+// Valor inicial ja no tipo que o widget espera
+Static Function InitValue(nType, cVal)
+    Local uRet
+
+    Do Case
+    Case nType == FT_BOOLEAN
+        uRet := (Lower(AllTrim(cVal)) == "true")
+    Case nType == FT_NUMBER .Or. nType == FT_DECIMAL
+        uRet := Val(cVal)
+    Case nType == FT_DATE
+        uRet := IIf(Empty(cVal), CToD(""), SToD(StrTran(cVal, "-", "")))
+    Otherwise
+        uRet := PadR(cVal, 250)
+    EndCase
+Return uRet
+
+// A API recebe todo valor como string, igual ao frontend React
+Static Function ValueToStr(nType, uVal)
+    Local cRet := ""
+
+    Do Case
+    Case nType == FT_BOOLEAN
+        cRet := IIf(uVal, "true", "false")
+    Case nType == FT_NUMBER
+        cRet := AllTrim(Str(uVal, 18, 0))
+    Case nType == FT_DECIMAL
+        cRet := AllTrim(Str(uVal, 18, 4))
+    Case nType == FT_DATE
+        cRet := IIf(Empty(uVal), "", SubStr(DToS(uVal), 1, 4) + "-" + SubStr(DToS(uVal), 5, 2) + "-" + SubStr(DToS(uVal), 7, 2))
+    Case nType == FT_FILE
+        cRet := FileToB64(AllTrim(uVal))
+    Otherwise
+        cRet := AllTrim(uVal)
+    EndCase
+Return cRet
+
+Static Function FileToB64(cPath)
+    Local nHandle := 0
+    Local nSize   := 0
+    Local cBuffer := ""
+
+    If Empty(cPath)
+        Return ""
+    EndIf
+
+    nHandle := FOpen(cPath, FO_READ)
+    If nHandle < 0
+        MsgAlert("Nao foi possivel ler o arquivo: " + cPath, "Central de Integracoes")
+        Return ""
+    EndIf
+
+    nSize := FSeek(nHandle, 0, FS_END)
+    FSeek(nHandle, 0, FS_SET)
+    cBuffer := Space(nSize)
+    FRead(nHandle, @cBuffer, nSize)
+    FClose(nHandle)
+Return Encode64(cBuffer)
+
+// Numerico e logico ficam de fora: 0 e .F. sao valores validos
+Static Function ValidForm(aFields, aValues)
+    Local nI    := 0
+    Local nType := 0
+
+    For nI := 1 To Len(aFields)
+        nType := aFields[nI][FLD_TYPE]
+        If !aFields[nI][FLD_REQ]
+            Loop
+        EndIf
+        If nType == FT_BOOLEAN .Or. nType == FT_NUMBER .Or. nType == FT_DECIMAL
+            Loop
+        EndIf
+        If Empty(aValues[nI])
+            MsgAlert("Preencha o campo obrigatorio: " + aFields[nI][FLD_LABEL], "Central de Integracoes")
+            Return .F.
+        EndIf
+    Next nI
+Return .T.
+
+Static Function SaveAll(oClient, nIntegId, cConnName, nConnId, aFields, aValues)
+    Local nI   := 0
+    Local nId  := nConnId
+    Local cVal := ""
+
+    If nId <= 0
+        nId := oClient:CreateConnector(nIntegId, cConnName)
+        If nId <= 0
+            MsgAlert(oClient:cLastError, "Central de Integracoes")
+            Return .F.
+        EndIf
+    ElseIf !oClient:UpdateConnector(nId, nIntegId, cConnName, .T.)
+        MsgAlert(oClient:cLastError, "Central de Integracoes")
+        Return .F.
+    EndIf
+
+    For nI := 1 To Len(aFields)
+        cVal := ValueToStr(aFields[nI][FLD_TYPE], aValues[nI])
+        // a API rejeita Value vazio; atributo em branco simplesmente nao vai
+        If Empty(cVal)
+            Loop
+        EndIf
+        If !oClient:SaveConnectorAttributeValue(nId, aFields[nI][FLD_ID], cVal, aFields[nI][FLD_VALUEID])
+            MsgAlert("Falha ao gravar " + aFields[nI][FLD_LABEL] + ": " + oClient:cLastError, "Central de Integracoes")
+            Return .F.
+        EndIf
+    Next nI
+Return .T.
+
+Static Function ExistingValue(aExist, nAttrId, nValId, cVal)
+    Local nI := 0
+
+    nValId := 0
+    cVal   := ""
+
+    For nI := 1 To Len(aExist)
+        If JNum(aExist[nI], "integrationAttributeId") == nAttrId
+            nValId := JNum(aExist[nI], "id")
+            cVal   := JText(aExist[nI], "value")
+            Exit
+        EndIf
+    Next nI
+Return Nil
+
+// Leitores de JSON tolerantes a chave ausente e a null
+// (description/placeholder/group/defaultValue sao nullable no contrato)
+Static Function JVal(oJson, cKey)
+    Local uRet := Nil
+
+    If oJson != Nil .And. oJson:HasProperty(cKey)
+        uRet := oJson[cKey]
+    EndIf
+Return uRet
+
+Static Function JText(oJson, cKey)
+    Local uVal := JVal(oJson, cKey)
+Return IIf(ValType(uVal) == "C", uVal, "")
+
+Static Function JNum(oJson, cKey)
+    Local uVal := JVal(oJson, cKey)
+Return IIf(ValType(uVal) == "N", uVal, 0)
+
+Static Function JBool(oJson, cKey)
+    Local uVal := JVal(oJson, cKey)
+Return IIf(ValType(uVal) == "L", uVal, .F.)
