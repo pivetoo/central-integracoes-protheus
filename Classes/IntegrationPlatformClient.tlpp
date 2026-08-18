@@ -4,9 +4,7 @@
 namespace custom.cti
 
 // Cliente REST da IntegrationPlatform. Le ZZ_CTIURL/ZZ_CTIKEY por filial.
-// Toda resposta vem no envelope {message,data,errors,pagination}
-// (Archon.Api.Controllers.ApiControllerBase) - DoRequest sempre tenta
-// parsear o corpo nesse formato, em sucesso e em erro.
+// Toda resposta vem no envelope {message,data,errors,pagination}.
 Class IntegrationPlatformClient
 
     Private Data cBaseUrl   as Character
@@ -105,7 +103,6 @@ Method UpdateConnector(nConnectorId, nIntegrationId, cName, lActive) Class Integ
     oResp := ::DoRequest("PUT", "/api/connectors/" + cValToChar(nConnectorId), oJson:ToJson())
 Return (oResp != Nil)
 
-// nExistingValueId > 0 -> PUT (atualiza); senao -> POST (cria)
 Method SaveConnectorAttributeValue(nConnectorId, nIntegrationAttributeId, cValue, nExistingValueId) Class IntegrationPlatformClient
     Local oJson := JsonObject():New()
     Local oResp

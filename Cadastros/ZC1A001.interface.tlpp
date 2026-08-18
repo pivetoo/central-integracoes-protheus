@@ -5,9 +5,6 @@
 namespace custom.cti.zc1a001
 
 // Interface Smart X da ZC1 - browse + inclusao/edicao/visualizacao.
-// Eventos ficam no Model, nao aqui (padrao Smart X).
-// Fonte em ASCII puro de proposito: acentuacao vem do dicionario
-// (X3_TITULO/X3_DESCRIC), pois CP1252 no fonte quebra em round-trip de edicao.
 @totvsFrameworkStructureInterface(lookup=.F., country="ALL", description="Referencia de Conector por Finalidade")
 
 class Interface
