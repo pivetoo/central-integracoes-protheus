@@ -2,24 +2,7 @@
 
 namespace custom.cti.zc1a001
 
-/*/{Protheus.doc} ZC1A001
-    Launcher (função de menu) da rotina Smart X de manutenção da tabela ZC1
-    (Referência de Conector por Finalidade). Abre a Interface
-    custom.cti.zc1a001.interface, que por sua vez referencia o Model
-    custom.cti.zc1a001.model.
-
-    Manutenção CRUD simples (browse + inclusão/alteração/exclusão), sem
-    regra de negócio complexa. O campo ZC1_CONECT (Id do conector escolhido
-    na IntegrationPlatform) e o campo ZC1_CONNM (nome do conector) são
-    preenchidos via gatilho de onChange do campo ZC1_CATEG, definido no
-    Model - ver Cadastros/ZC1A001.model.tlpp, método addConnectorTrigger e
-    função ponte buscaConector (ainda não implementada, pendente de
-    U_CTIBUSCACON).
-    @type Function
-    @author pivetorogerio@gmail.com
-    @since 17/08/2026
-    @return Nil
-/*/
+// Launcher de menu da rotina Smart X ZC1A001 (Referencia de Conector por Finalidade).
 User Function ZC1A001()
     Local oLauncher as Object
 
