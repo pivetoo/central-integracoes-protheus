@@ -5,6 +5,11 @@ namespace custom.cti
 
 // Cliente REST da IntegrationPlatform. Le ZZ_CTIURL/ZZ_CTIKEY por filial.
 // Toda resposta vem no envelope {message,data,errors,pagination}.
+//
+// Rotas: os atributos do Archon (PostEndpoint/PutEndpoint) sem template usam
+// "[action]", ou seja, o nome do metodo entra na URL - dai /connectors/Create e
+// /connectors/Update/{id}. Os GET tem template proprio ("active", "category/{id}")
+// e por isso nao levam o nome do metodo.
 Class IntegrationPlatformClient
 
     Private Data cBaseUrl   as Character
@@ -25,6 +30,7 @@ Class IntegrationPlatformClient
 
     Private Method DoRequest(cVerb as Character, cPath as Character, cBody as Character) as Object
     Private Method GetData(cVerb as Character, cPath as Character) as Array
+    Private Method ErrorFrom(cBody as Character) as Character
 
 EndClass
 
@@ -75,7 +81,7 @@ Method CreateConnector(nIntegrationId, cName, cSystemApplicationId) Class Integr
         oJson["systemApplicationId"] := cSystemApplicationId
     EndIf
 
-    oResp := ::DoRequest("POST", "/api/connectors", oJson:ToJson())
+    oResp := ::DoRequest("POST", "/api/connectors/Create", oJson:ToJson())
     If oResp != Nil
         oData := oResp["data"]
         If oData != Nil
@@ -92,7 +98,7 @@ Method UpdateConnector(nConnectorId, nIntegrationId, cName, lActive) Class Integ
     oJson["integrationId"] := nIntegrationId
     oJson["name"]          := cName
     oJson["isActive"]      := lActive
-Return (::DoRequest("PUT", "/api/connectors/" + cValToChar(nConnectorId), oJson:ToJson()) != Nil)
+Return (::DoRequest("PUT", "/api/connectors/Update/" + cValToChar(nConnectorId), oJson:ToJson()) != Nil)
 
 Method SaveConnectorAttributeValue(nConnectorId, nIntegrationAttributeId, cValue, nExistingValueId) Class IntegrationPlatformClient
     Local oJson := JsonObject():New()
@@ -104,12 +110,12 @@ Method SaveConnectorAttributeValue(nConnectorId, nIntegrationAttributeId, cValue
         oJson["id"]                     := nExistingValueId
         oJson["integrationAttributeId"] := nIntegrationAttributeId
         oJson["value"]                  := cValue
-        oResp := ::DoRequest("PUT", "/api/connectorattributevalues/" + cValToChar(nExistingValueId), oJson:ToJson())
+        oResp := ::DoRequest("PUT", "/api/connectorattributevalues/Update/" + cValToChar(nExistingValueId), oJson:ToJson())
     Else
         oJson["connectorId"]            := nConnectorId
         oJson["integrationAttributeId"] := nIntegrationAttributeId
         oJson["value"]                  := cValue
-        oResp := ::DoRequest("POST", "/api/connectorattributevalues", oJson:ToJson())
+        oResp := ::DoRequest("POST", "/api/connectorattributevalues/Create", oJson:ToJson())
     EndIf
 Return (oResp != Nil)
 
@@ -123,47 +129,103 @@ Method GetData(cVerb, cPath) Class IntegrationPlatformClient
     EndIf
 Return aRet
 
-// TODO smoke test: confirmar contra a API real se oRest:Get/Post/Put ja
-// refletem 2xx vs 4xx/5xx corretamente, e se oRest:cResult e a propriedade
-// certa de corpo de resposta da FWRest nesta versao de Protheus.
+// GET usa FWRest (funciona). POST/PUT usam as funcoes nativas: no FWRest desta
+// build o corpo da resposta volta vazio no POST (a propria TOTVS documenta que a
+// classe so recupera Response quando nao ha redirect, e indica HttpPost). O
+// projeto irmao integ_santander_lanchero ja usa as nativas em producao.
 Method DoRequest(cVerb, cPath, cBody) Class IntegrationPlatformClient
-    Local oRest   := FWRest():New(::cBaseUrl)
-    Local aHeader := {}
-    Local lOk     := .F.
-    Local oResp   := JsonObject():New()
+    Local oRest
+    Local aHeader  := {}
+    Local oResp    := JsonObject():New()
+    Local cResult  := ""
+    Local cUrl     := ::cBaseUrl + cPath
+    Local cHttpDsc := ""
+    Local nStatus  := 0
+    Local lOk      := .F.
 
     aAdd(aHeader, "X-Api-Key: " + ::cApiKey)
     aAdd(aHeader, "Content-Type: application/json")
     aAdd(aHeader, "Accept: application/json")
 
-    oRest:SetPath(cPath)
+    // TODO temporario: rastreio no console.log enquanto o debugger web nao presta
+    ConOut("[CTI] >> " + Upper(cVerb) + " " + cUrl)
+    ConOut("[CTI]    key=" + cValToChar(Len(::cApiKey)) + " chars | body=" + SubStr(cBody, 1, 200))
 
     Do Case
     Case Upper(cVerb) == "GET"
-        lOk := oRest:Get(aHeader)
+        oRest := FWRest():New(::cBaseUrl)
+        oRest:SetPath(cPath)
+        lOk     := oRest:Get(aHeader)
+        cResult := oRest:cResult
+
     Case Upper(cVerb) == "POST"
-        oRest:SetPostParams(cBody)
-        lOk := oRest:Post(aHeader)
+        cResult := HTTPPost(cUrl, "", cBody, 60, aHeader)
+        nStatus := HTTPGetStatus(@cHttpDsc)
+        lOk     := (nStatus >= 200 .And. nStatus < 300)
+
     Case Upper(cVerb) == "PUT"
-        oRest:SetPostParams(cBody)
-        lOk := oRest:Put(aHeader)
+        cResult := HTTPQuote(cUrl, "PUT", "", cBody, 60, aHeader)
+        nStatus := HTTPGetStatus(@cHttpDsc)
+        lOk     := (nStatus >= 200 .And. nStatus < 300)
     EndCase
+
+    ConOut("[CTI] << lOk=" + cValToChar(lOk) + " status=" + cValToChar(nStatus) + ;
+           " | result=" + SubStr(cResult, 1, 300))
 
     ::cLastError := ""
 
-    If lOk .And. !Empty(oRest:cResult)
-        If oResp:FromJson(oRest:cResult) == Nil
+    If lOk
+        If !Empty(cResult) .And. oResp:FromJson(cResult) == Nil
             Return oResp
         EndIf
-        ::cLastError := "Falha ao interpretar a resposta da IntegrationPlatform"
-        Return Nil
+        // 2xx sem corpo (ex: 204) ainda e sucesso
+        Return JsonObject():New()
     EndIf
 
-    If !Empty(oRest:cResult) .And. oResp:FromJson(oRest:cResult) == Nil
-        ::cLastError := oResp:GetJsonText("message")
-    EndIf
-
-    If Empty(::cLastError)
-        ::cLastError := "Falha de comunicacao com a IntegrationPlatform (verifique ZZ_CTIURL/ZZ_CTIKEY)"
-    EndIf
+    ::cLastError := ::ErrorFrom(cResult)
 Return Nil
+
+// Monta a mensagem de erro. O Archon devolve { message, errors: { traceId } } -
+// o traceId liga a falha ao stack trace no log da API, entao vai junto na tela.
+Method ErrorFrom(cBody) Class IntegrationPlatformClient
+    Local oJson   := JsonObject():New()
+    Local oErrors
+    Local cMsg    := ""
+    Local cTrace  := ""
+    Local nStatus := 0
+
+    If Empty(cBody)
+        Return "Sem resposta da IntegrationPlatform (verifique ZZ_CTIURL/ZZ_CTIKEY e se a API esta no ar)"
+    EndIf
+
+    If oJson:FromJson(cBody) != Nil
+        Return "Resposta nao e JSON. Corpo: " + SubStr(cBody, 1, 400)
+    EndIf
+
+    cMsg := oJson:GetJsonText("message")
+
+    If oJson:HasProperty("errors")
+        oErrors := oJson["errors"]
+        If ValType(oErrors) == "O"
+            cTrace := oErrors:GetJsonText("traceId")
+            If oErrors:HasProperty("status") .And. ValType(oErrors["status"]) == "N"
+                nStatus := oErrors["status"]
+            EndIf
+            If Empty(cMsg)
+                cMsg := oErrors:GetJsonText("detail")
+            EndIf
+        EndIf
+    EndIf
+
+    If Empty(cMsg)
+        cMsg := SubStr(cBody, 1, 400)
+    EndIf
+
+    If nStatus > 0
+        cMsg := "HTTP " + cValToChar(nStatus) + " - " + cMsg
+    EndIf
+
+    If !Empty(cTrace)
+        cMsg += CRLF + CRLF + "traceId: " + cTrace
+    EndIf
+Return cMsg

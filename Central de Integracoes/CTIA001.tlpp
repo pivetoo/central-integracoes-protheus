@@ -27,8 +27,8 @@
 #define FLD_SENS   6
 #define FLD_VALUEID  7
 
-#define ROW_H     16
-#define FORM_MAXH 260
+#define ROW_H     20
+#define FORM_MAXH 320
 
 /*
 Central de Integracoes - cadastro de conector na IntegrationPlatform.
@@ -65,31 +65,31 @@ User Function CTIA001()
     Next nI
     cCategSel := aCategNm[1]
 
-    DEFINE MSDIALOG oDlg TITLE "Central de Integracoes" FROM 0,0 TO 190,460 PIXEL
+    DEFINE MSDIALOG oDlg TITLE "Central de Integracoes" FROM 0,0 TO 390,760 PIXEL
 
-    @ 012,010 SAY "Categoria:"        SIZE 060,008 OF oDlg PIXEL
-    @ 010,075 COMBOBOX oCbCateg VAR cCategSel ITEMS aCategNm SIZE 150,010 OF oDlg PIXEL ;
+    @ 020,020 SAY "Categoria:"        SIZE 090,010 OF oDlg PIXEL
+    @ 018,115 COMBOBOX oCbCateg VAR cCategSel ITEMS aCategNm SIZE 240,012 OF oDlg PIXEL ;
         ON CHANGE ( LoadProv(oClient, aCategs, cCategSel, aProvs, aProvNm, oCbProv), ;
                     cProvSel := IIf(Len(aProvNm) > 0, aProvNm[1], ""), ;
                     LoadConn(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn), ;
                     cConnSel := aConnNm[1] )
 
-    @ 032,010 SAY "Provedor:"         SIZE 060,008 OF oDlg PIXEL
-    @ 030,075 COMBOBOX oCbProv VAR cProvSel ITEMS aProvNm SIZE 150,010 OF oDlg PIXEL ;
+    @ 050,020 SAY "Provedor:"         SIZE 090,010 OF oDlg PIXEL
+    @ 048,115 COMBOBOX oCbProv VAR cProvSel ITEMS aProvNm SIZE 240,012 OF oDlg PIXEL ;
         ON CHANGE ( LoadConn(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn), ;
                     cConnSel := aConnNm[1] )
 
-    @ 052,010 SAY "Conector:"         SIZE 060,008 OF oDlg PIXEL
-    @ 050,075 COMBOBOX oCbConn VAR cConnSel ITEMS aConnNm SIZE 150,010 OF oDlg PIXEL ;
+    @ 080,020 SAY "Conector:"         SIZE 090,010 OF oDlg PIXEL
+    @ 078,115 COMBOBOX oCbConn VAR cConnSel ITEMS aConnNm SIZE 240,012 OF oDlg PIXEL ;
         ON CHANGE ( cConnName := PadR(ConnNameOf(aConns, aConnNm, cConnSel), 100) )
 
-    @ 072,010 SAY "Nome do conector:" SIZE 060,008 OF oDlg PIXEL
-    @ 070,075 GET oGetNome VAR cConnName SIZE 150,010 OF oDlg PIXEL
+    @ 110,020 SAY "Nome do conector:" SIZE 090,010 OF oDlg PIXEL
+    @ 108,115 GET oGetNome VAR cConnName SIZE 240,012 OF oDlg PIXEL
 
-    @ 095,075 BUTTON "Credenciais..." SIZE 070,013 OF oDlg PIXEL ;
+    @ 145,115 BUTTON "Credenciais..." SIZE 110,016 OF oDlg PIXEL ;
         ACTION OpenCred(oClient, aProvs, aProvNm, cProvSel, aConns, aConnNm, cConnSel, cConnName)
 
-    @ 095,150 BUTTON "Fechar"         SIZE 070,013 OF oDlg PIXEL ACTION oDlg:End()
+    @ 145,245 BUTTON "Fechar"         SIZE 110,016 OF oDlg PIXEL ACTION oDlg:End()
 
     ACTIVATE MSDIALOG oDlg CENTERED ON INIT ( ;
         LoadProv(oClient, aCategs, cCategSel, aProvs, aProvNm, oCbProv), ;
@@ -223,11 +223,12 @@ Static Function OpenCred(oClient, aProvs, aProvNm, cProvSel, aConns, aConnNm, cC
 
     nPanelH := Min(Len(aFields) * ROW_H + 8, FORM_MAXH)
 
-    DEFINE MSDIALOG oDlg TITLE "Credenciais - " + AllTrim(cProvSel) FROM 0,0 TO nPanelH + 58, 440 PIXEL
+    // TO no dobro das coordenadas dos filhos (ver comentario na tela de selecao)
+    DEFINE MSDIALOG oDlg TITLE "Credenciais - " + AllTrim(cProvSel) FROM 0,0 TO nPanelH * 2 + 180, 1000 PIXEL
 
-    @ nPanelH + 20, 120 BUTTON "Salvar"   SIZE 060,013 OF oDlg PIXEL ;
+    @ nPanelH + 40, 150 BUTTON "Salvar"   SIZE 100,016 OF oDlg PIXEL ;
         ACTION ( IIf(ValidForm(aFields, aValues), (aResult[1] := .T., oDlg:End()), Nil) )
-    @ nPanelH + 20, 190 BUTTON "Cancelar" SIZE 060,013 OF oDlg PIXEL ACTION oDlg:End()
+    @ nPanelH + 40, 265 BUTTON "Cancelar" SIZE 100,016 OF oDlg PIXEL ACTION oDlg:End()
 
     ACTIVATE MSDIALOG oDlg CENTERED ON INIT BuildForm(oDlg, aFields, aValues, aObjs, nPanelH)
 
@@ -240,8 +241,8 @@ Return Nil
 
 // Cria um widget por atributo dentro do scroll. Chamado no bInit do dialogo.
 Static Function BuildForm(oDlg, aFields, aValues, aObjs, nPanelH)
-    Local oScroll := TScrollBox():New(oDlg, 005, 005, nPanelH, 425, .T., .F., .T.)
-    Local nRow    := 4
+    Local oScroll := TScrollBox():New(oDlg, 010, 010, nPanelH, 480, .T., .F., .T.)
+    Local nRow    := 6
     Local nI      := 0
 
     For nI := 1 To Len(aFields)
@@ -259,20 +260,20 @@ Static Function BuildOne(oParent, aField, aValues, nIdx, nRow, aObjs)
     Local bGet   := ValueBlock(aValues, nIdx)
     Local oSay, oObj
 
-    oSay := TSay():New(nRow + 1, 005, {|| cLabel }, oParent, , , , , , .T., CLR_BLACK, , 130, 010)
+    oSay := TSay():New(nRow + 2, 008, {|| cLabel }, oParent, , , , , , .T., CLR_BLACK, , 150, 012)
     aAdd(aObjs, oSay)
 
     Do Case
     Case nType == FT_BOOLEAN
-        oObj := TCheckBox():New(nRow, 140, "", bGet, oParent, 020, 010, , , , , , , , .T.)
+        oObj := TCheckBox():New(nRow, 165, "", bGet, oParent, 020, 012, , , , , , , , .T.)
 
     Case nType == FT_FILE
-        oSay := TSay():New(nRow + 1, 205, {|| FileLabel(aValues, nIdx) }, oParent, , , , , , .T., CLR_BLUE, , 210, 010)
-        oObj := TButton():New(nRow, 140, "Selecionar...", oParent, FileBlock(aValues, nIdx, oSay), 060, 011, , , , .T.)
+        oSay := TSay():New(nRow + 2, 275, {|| FileLabel(aValues, nIdx) }, oParent, , , , , , .T., CLR_BLUE, , 195, 012)
+        oObj := TButton():New(nRow, 165, "Selecionar...", oParent, FileBlock(aValues, nIdx, oSay), 100, 014, , , , .T.)
         aAdd(aObjs, oSay)
 
     Otherwise
-        oObj := TGet():New(nRow, 140, bGet, oParent, 275, 010, FieldPict(nType), , , , , , , .T.)
+        oObj := TGet():New(nRow, 165, bGet, oParent, 305, 012, FieldPict(nType), , , , , , , .T.)
         If aField[FLD_SENS]
             oObj:lPassword := .T.
         EndIf
