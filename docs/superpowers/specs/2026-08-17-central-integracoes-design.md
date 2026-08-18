@@ -31,7 +31,7 @@ guarda é a própria API Key da IntegrationPlatform (uma por cliente/ambiente, v
 Dentro:
 - Tela dinâmica de conector (categoria → provedor → credencial → salvar/editar).
 - Dicionário de dados ZC1 (referência de conector por finalidade) + tela de manutenção
-  simples (Smart X, campos fixos).
+  simples (MVC clássico, campos fixos).
 - Cliente REST reutilizável para a API da IntegrationPlatform.
 
 Fora (fica pra depois, como projetos/fases separadas):
@@ -53,9 +53,9 @@ Decisão: **tela clássica ADVPL** (`MsDialog`/`TGet`/`TCombobox`/`TCheckBox`/`G
 montada dinamicamente em loop a partir da resposta da API — técnica antiga mas
 comprovada, e a única que suporta tipo de campo genuinamente variável em runtime.
 
-A tela de manutenção da ZC1, ao contrário, tem campos fixos (não varia por provedor) —
-mesma categoria de problema que a política de cobrança (ZB1) do projeto irmão, então
-**Smart X normal** se aplica sem ressalvas.
+A tela de manutenção da ZC1 tem campos fixos e chegou a ser feita em Smart X, mas foi
+reescrita em MVC clássico — o Smart X exige release 12.1.2610 e o ambiente está na
+12.1.2510. Detalhes na seção da `ZC1A001`.
 
 ## Estrutura do projeto
 
@@ -66,9 +66,7 @@ central-integracoes/
   Central de Integracoes/
     CTIA001.tlpp                    → tela dinâmica (categoria→provedor→credencial→salvar)
   Cadastros/
-    ZC1A001.model.tlpp              → Smart X — model
-    ZC1A001.interface.tlpp          → Smart X — interface
-    ZC1A001.tlpp                    → Smart X — launcher (User Function ZC1A001)
+    ZC1A001.prw                     → MVC classico (browse + cadastro da ZC1)
   Dicionario/
     ZC1-campos.md                   → referência de campos p/ cadastro manual via Configurador
   docs/superpowers/specs/           → specs de design (este arquivo)
@@ -207,13 +205,21 @@ futuras (ex: Régua de Cobrança sabe qual conector WhatsApp usar pela finalidad
 
 ### Tela de manutenção ZC1 (`ZC1A001`)
 
-Smart X simples (browse + cadastro): campos fixos, sem a limitação de runtime que
-descartou o Smart X na tela principal. Namespace `custom.cti.zc1a001`, seguindo o
-padrão oficial de Model/Interface genéricos (referência: exemplo `FINA050SM` da
-documentação TOTVS). `ZC1_CONNM` é somente-leitura no Model — preenchido via gatilho
-`onChange` de `ZC1_CATEG`, que chama uma função-ponte (`custom.cti.zc1a001.buscaConector`)
-hoje com stub, documentada como ponto de extensão para quando a função `U_CTIBUSCACON`
-(busca real de conectores via `GetActiveConnectors()`) existir.
+**MVC clássico** (`FWMBrowse` + `MPFormModel`/`FWFormView`), arquivo único
+`Cadastros/ZC1A001.prw`. Campos fixos vindos do dicionário via `FWFormStruct`.
+
+Foi implementada primeiro em Smart X e **reescrita em 18/08/2026**: o Smart X exige
+release **12.1.2610** e o ambiente está na **12.1.2510** — o `VersionValidator` aborta
+no construtor do launcher com "Detectada inconsistência no ambiente". Não é contornável
+por código, e o upgrade de release depende do RPO, que só sai do portal TOTVS com
+credencial de cliente. Como a tela principal (`CTIA001`) já é ADVPL clássico e roda
+neste ambiente, o MVC elimina a dependência de versão.
+
+A validação de pós-gravação recusa código e categoria em maiúsculas — eles precisam
+casar com os identificadores minúsculos da IntegrationPlatform.
+
+A busca automática de conector (`U_CTIBUSCACON`) continua fora de escopo; até ela
+existir, `ZC1_CONECT` é digitado à mão.
 
 ## Integração ao menu
 
