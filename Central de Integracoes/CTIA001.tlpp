@@ -310,7 +310,7 @@ Static Function FieldPict(nType)
     EndCase
 Return cPict
 
-// Valor inicial ja no tipo que o widget espera
+// Valor inicial ja no tipo que o widget espera\
 Static Function InitValue(nType, cVal)
     Local uRet
 

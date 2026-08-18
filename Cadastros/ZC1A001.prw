@@ -2,8 +2,7 @@
 #Include "FWMVCDef.ch"
 
 // Cadastro da ZC1 - qual conta da IntegrationPlatform atende cada finalidade
-// de integracao. MVC classico: o ambiente esta na release 12.1.2510 e o
-// Smart X exige 12.1.2610.
+// de integracao.
 User Function ZC1A001()
     Local oBrowse := FWMBrowse():New()
 
@@ -49,8 +48,6 @@ Static Function ViewDef()
     oView:EnableTitleView("VIEW_ZC1", "Finalidade de Integracao")
 Return oView
 
-// O codigo e a categoria batem com identificadores da IntegrationPlatform, que
-// sao minusculos - maiuscula aqui faz a busca do conector nao encontrar nada.
 Static Function ValidPos(oModel)
     Local oZC1    := oModel:GetModel("ZC1MASTER")
     Local cCodigo := AllTrim(oZC1:GetValue("ZC1_CODIGO"))
