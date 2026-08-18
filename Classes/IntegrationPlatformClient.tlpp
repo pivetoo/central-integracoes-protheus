@@ -5,11 +5,6 @@ namespace custom.cti
 
 // Cliente REST da IntegrationPlatform. Le ZZ_CTIURL/ZZ_CTIKEY por filial.
 // Toda resposta vem no envelope {message,data,errors,pagination}.
-//
-// Rotas: os atributos do Archon (PostEndpoint/PutEndpoint) sem template usam
-// "[action]", ou seja, o nome do metodo entra na URL - dai /connectors/Create e
-// /connectors/Update/{id}. Os GET tem template proprio ("active", "category/{id}")
-// e por isso nao levam o nome do metodo.
 Class IntegrationPlatformClient
 
     Private Data cBaseUrl   as Character
@@ -129,10 +124,8 @@ Method GetData(cVerb, cPath) Class IntegrationPlatformClient
     EndIf
 Return aRet
 
-// GET usa FWRest (funciona). POST/PUT usam as funcoes nativas: no FWRest desta
-// build o corpo da resposta volta vazio no POST (a propria TOTVS documenta que a
-// classe so recupera Response quando nao ha redirect, e indica HttpPost). O
-// projeto irmao integ_santander_lanchero ja usa as nativas em producao.
+// POST/PUT usam as funcoes nativas porque o FWRest devolve corpo vazio nesses
+// verbos; o GET continua no FWRest.
 Method DoRequest(cVerb, cPath, cBody) Class IntegrationPlatformClient
     Local oRest
     Local aHeader  := {}
@@ -146,10 +139,6 @@ Method DoRequest(cVerb, cPath, cBody) Class IntegrationPlatformClient
     aAdd(aHeader, "X-Api-Key: " + ::cApiKey)
     aAdd(aHeader, "Content-Type: application/json")
     aAdd(aHeader, "Accept: application/json")
-
-    // TODO temporario: rastreio no console.log enquanto o debugger web nao presta
-    ConOut("[CTI] >> " + Upper(cVerb) + " " + cUrl)
-    ConOut("[CTI]    key=" + cValToChar(Len(::cApiKey)) + " chars | body=" + SubStr(cBody, 1, 200))
 
     Do Case
     Case Upper(cVerb) == "GET"
@@ -169,8 +158,6 @@ Method DoRequest(cVerb, cPath, cBody) Class IntegrationPlatformClient
         lOk     := (nStatus >= 200 .And. nStatus < 300)
     EndCase
 
-    ConOut("[CTI] << lOk=" + cValToChar(lOk) + " status=" + cValToChar(nStatus) + ;
-           " | result=" + SubStr(cResult, 1, 300))
 
     ::cLastError := ""
 
@@ -185,8 +172,8 @@ Method DoRequest(cVerb, cPath, cBody) Class IntegrationPlatformClient
     ::cLastError := ::ErrorFrom(cResult)
 Return Nil
 
-// Monta a mensagem de erro. O Archon devolve { message, errors: { traceId } } -
-// o traceId liga a falha ao stack trace no log da API, entao vai junto na tela.
+// Mensagem de erro a partir do corpo. O traceId vai junto por permitir localizar
+// a falha no log da API.
 Method ErrorFrom(cBody) Class IntegrationPlatformClient
     Local oJson   := JsonObject():New()
     Local oErrors

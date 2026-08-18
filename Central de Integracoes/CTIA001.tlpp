@@ -3,9 +3,7 @@
 #include "fileio.ch"
 
 // Sem namespace de proposito: User Function dentro de namespace nao se registra
-// como U_NOME global e o SmartClient nao consegue chamar (mesmo motivo pelo qual
-// o launcher oficial FINA050SM tambem nao declara namespace). Por isso o nome
-// tambem respeita o limite de 8 caracteres do ADVPL.
+// como U_NOME global. Sem namespace vale o limite de 8 caracteres no nome.
 
 // FieldType da IntegrationPlatform (IntegrationPlatform.Domain.ValueObjects.FieldType)
 #define FT_TEXT      1
@@ -251,9 +249,6 @@ Static Function BuildForm(oDlg, aFields, aValues, aObjs, nPanelH)
     Next nI
 Return Nil
 
-// TODO 1a compilacao: TGet (lPixel na 14) e TSay seguem assinatura conferida,
-// mas a posicao de lPixel em TCheckBox/TButton e a propriedade oGet:lPassword
-// nao foram validadas contra esta build - ajustar aqui se a tela nao renderizar.
 Static Function BuildOne(oParent, aField, aValues, nIdx, nRow, aObjs)
     Local cLabel := aField[FLD_LABEL] + IIf(aField[FLD_REQ], " *", "")
     Local nType  := aField[FLD_TYPE]
@@ -331,7 +326,7 @@ Static Function InitValue(nType, cVal)
     EndCase
 Return uRet
 
-// A API recebe todo valor como string, igual ao frontend React
+// A API recebe todo valor como string
 Static Function ValueToStr(nType, uVal)
     Local cRet := ""
 
