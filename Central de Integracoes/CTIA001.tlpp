@@ -2,7 +2,10 @@
 #include "protheus.ch"
 #include "fileio.ch"
 
-namespace custom.cti
+// Sem namespace de proposito: User Function dentro de namespace nao se registra
+// como U_NOME global e o SmartClient nao consegue chamar (mesmo motivo pelo qual
+// o launcher oficial FINA050SM tambem nao declara namespace). Por isso o nome
+// tambem respeita o limite de 8 caracteres do ADVPL.
 
 // FieldType da IntegrationPlatform (IntegrationPlatform.Domain.ValueObjects.FieldType)
 #define FT_TEXT      1
@@ -36,7 +39,7 @@ Tela 2 (montada em runtime): um campo por atributo do provedor, com o widget
 definido pelo FieldType que a API devolve. Os campos sao criados dentro do
 bInit do dialogo - TGet criado antes da tela existir em memoria nao renderiza.
 */
-User Function CENTINTEG()
+User Function CTIA001()
     Local oClient   := custom.cti.IntegrationPlatformClient():New()
     Local aCategs   := {}
     Local aCategNm  := {}
@@ -66,14 +69,14 @@ User Function CENTINTEG()
 
     @ 012,010 SAY "Categoria:"        SIZE 060,008 OF oDlg PIXEL
     @ 010,075 COMBOBOX oCbCateg VAR cCategSel ITEMS aCategNm SIZE 150,010 OF oDlg PIXEL ;
-        ON CHANGE ( LoadProviders(oClient, aCategs, cCategSel, aProvs, aProvNm, oCbProv), ;
+        ON CHANGE ( LoadProv(oClient, aCategs, cCategSel, aProvs, aProvNm, oCbProv), ;
                     cProvSel := IIf(Len(aProvNm) > 0, aProvNm[1], ""), ;
-                    LoadConnectors(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn), ;
+                    LoadConn(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn), ;
                     cConnSel := aConnNm[1] )
 
     @ 032,010 SAY "Provedor:"         SIZE 060,008 OF oDlg PIXEL
     @ 030,075 COMBOBOX oCbProv VAR cProvSel ITEMS aProvNm SIZE 150,010 OF oDlg PIXEL ;
-        ON CHANGE ( LoadConnectors(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn), ;
+        ON CHANGE ( LoadConn(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn), ;
                     cConnSel := aConnNm[1] )
 
     @ 052,010 SAY "Conector:"         SIZE 060,008 OF oDlg PIXEL
@@ -89,16 +92,16 @@ User Function CENTINTEG()
     @ 095,150 BUTTON "Fechar"         SIZE 070,013 OF oDlg PIXEL ACTION oDlg:End()
 
     ACTIVATE MSDIALOG oDlg CENTERED ON INIT ( ;
-        LoadProviders(oClient, aCategs, cCategSel, aProvs, aProvNm, oCbProv), ;
+        LoadProv(oClient, aCategs, cCategSel, aProvs, aProvNm, oCbProv), ;
         cProvSel := IIf(Len(aProvNm) > 0, aProvNm[1], ""), ;
         oCbProv:Refresh(), ;
-        LoadConnectors(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn) )
+        LoadConn(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn) )
 Return
 
 // Recarrega o combo de provedores conforme a categoria escolhida.
 // Preenche aProvs/aProvNm por mutacao: reatribuir o parametro trocaria so o
 // local desta funcao e o chamador ficaria com a lista antiga.
-Static Function LoadProviders(oClient, aCategs, cCategSel, aProvs, aProvNm, oCbProv)
+Static Function LoadProv(oClient, aCategs, cCategSel, aProvs, aProvNm, oCbProv)
     Local nPos := aScan(aCategs, {|o| JText(o, "name") == cCategSel})
     Local aTmp := {}
     Local nI   := 0
@@ -121,7 +124,7 @@ Static Function LoadProviders(oClient, aCategs, cCategSel, aProvs, aProvNm, oCbP
 Return Nil
 
 // Recarrega o combo de conectores ja cadastrados no provedor escolhido
-Static Function LoadConnectors(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn)
+Static Function LoadConn(oClient, aProvs, cProvSel, aProvNm, aConns, aConnNm, oCbConn)
     Local nPos := aScan(aProvNm, {|c| c == cProvSel})
     Local aTmp := {}
     Local nI   := 0
@@ -202,7 +205,7 @@ Static Function OpenCred(oClient, aProvs, aProvNm, cProvSel, aConns, aConnNm, cC
         nType  := JNum(oAttr, "type")
         nValId := 0
         cVal   := ""
-        ExistingValue(aExist, JNum(oAttr, "id"), @nValId, @cVal)
+        ExistVal(aExist, JNum(oAttr, "id"), @nValId, @cVal)
         If Empty(cVal)
             cVal := JText(oAttr, "defaultValue")
         EndIf
@@ -226,7 +229,7 @@ Static Function OpenCred(oClient, aProvs, aProvNm, cProvSel, aConns, aConnNm, cC
         ACTION ( IIf(ValidForm(aFields, aValues), (aResult[1] := .T., oDlg:End()), Nil) )
     @ nPanelH + 20, 190 BUTTON "Cancelar" SIZE 060,013 OF oDlg PIXEL ACTION oDlg:End()
 
-    ACTIVATE MSDIALOG oDlg CENTERED ON INIT BuildFields(oDlg, aFields, aValues, aObjs, nPanelH)
+    ACTIVATE MSDIALOG oDlg CENTERED ON INIT BuildForm(oDlg, aFields, aValues, aObjs, nPanelH)
 
     If aResult[1]
         If SaveAll(oClient, nIntegId, AllTrim(cConnName), nConnId, aFields, aValues)
@@ -236,7 +239,7 @@ Static Function OpenCred(oClient, aProvs, aProvNm, cProvSel, aConns, aConnNm, cC
 Return Nil
 
 // Cria um widget por atributo dentro do scroll. Chamado no bInit do dialogo.
-Static Function BuildFields(oDlg, aFields, aValues, aObjs, nPanelH)
+Static Function BuildForm(oDlg, aFields, aValues, aObjs, nPanelH)
     Local oScroll := TScrollBox():New(oDlg, 005, 005, nPanelH, 425, .T., .F., .T.)
     Local nRow    := 4
     Local nI      := 0
@@ -418,7 +421,7 @@ Static Function SaveAll(oClient, nIntegId, cConnName, nConnId, aFields, aValues)
     Next nI
 Return .T.
 
-Static Function ExistingValue(aExist, nAttrId, nValId, cVal)
+Static Function ExistVal(aExist, nAttrId, nValId, cVal)
     Local nI := 0
 
     nValId := 0

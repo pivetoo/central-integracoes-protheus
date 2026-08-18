@@ -64,7 +64,7 @@ central-integracoes/
   Classes/
     IntegrationPlatformClient.tlpp  → classe TLPP, cliente REST único da API
   Central de Integracoes/
-    CENTINTEG.tlpp                  → tela dinâmica (categoria→provedor→credencial→salvar)
+    CTIA001.tlpp                    → tela dinâmica (categoria→provedor→credencial→salvar)
   Cadastros/
     ZC1A001.model.tlpp              → Smart X — model
     ZC1A001.interface.tlpp          → Smart X — interface
@@ -118,7 +118,7 @@ retornado pela API (os controllers já retornam mensagens localizadas via
 `IStringLocalizer`). Sem retry automático — é preenchimento manual de formulário, não
 um job em background.
 
-## Tela Central de Integrações (`CENTINTEG`)
+## Tela Central de Integrações (`CTIA001`)
 
 Implementada em dois diálogos, decisão tomada na implementação: o diálogo 1 só tem
 widgets fixos, então usa sintaxe de tempo de compilação (`@ ... COMBOBOX`), que é o
@@ -217,9 +217,41 @@ hoje com stub, documentada como ponto de extensão para quando a função `U_CTI
 
 ## Integração ao menu
 
-Entrega como `User Function` isolada (`CENTINTEG`, `ZC1A001`); a inclusão da opção no
-menu (Configurador → Ambiente → Cadastro → Menu) é feita manualmente no ambiente de
-destino — não altero tabela de menu ativa como parte deste projeto.
+**Módulo: Configurador (SIGACFG)**, decidido em 17/08/2026. A Central é configuração de
+ambiente, transversal — a régua de cobrança vai consumi-la, mas qualquer automação
+futura também; prendê-la a SIGAFIN amarraria uma fundação genérica a um módulo. E como
+a tela digita token/senha de provedor, o acesso restrito do Configurador é desejável.
+
+Estrutura sugerida, com as duas rotinas na mesma pasta:
+
+```
+Configurador
+└── Central de Integrações
+    ├── Conectores                 → U_CTIA001
+    └── Referência por Finalidade  → U_ZC1A001
+```
+
+Cadastro em Configurador → Ambiente → Cadastros → Menu, manual no ambiente de destino —
+não altero tabela de menu ativa como parte deste projeto.
+
+**Rodar pelo menu não é conveniência, é requisito.** Execução direta pelo SmartClient
+(`-P=U_CTIA001`) pula o login e não monta empresa/filial; a primeira leitura de
+parâmetro quebra com `variable does not exist CFILANT` dentro do `SuperGetMV`. Passar a
+filial explicitamente no 4º argumento **não** resolve — foi testado, o `SuperGetMV`
+consulta `cFilAnt` de qualquer forma. O login do módulo é o que prepara o ambiente.
+
+### Nome e namespace do ponto de entrada
+
+`CTIA001.tlpp` **não declara `namespace`**, de propósito: `User Function` dentro de
+namespace não se registra como `U_NOME` global e o SmartClient não consegue chamá-la
+(sintoma: `INVALID FUNCTION CALL`, mesmo com o fonte presente no RPO — confirmado no
+Inspetor de Objetos). O launcher oficial da TOTVS (`FINA050SM`) também não declara
+namespace, pelo mesmo motivo.
+
+Consequência: sem namespace valem os limites clássicos do ADVPL — 8 caracteres para
+`User Function` (daí `CTIA001`, e não `CENTINTEG`, que tem 9) e 10 para
+`Static Function`. A classe `IntegrationPlatformClient` mantém seu namespace
+normalmente e é referenciada pelo nome qualificado completo.
 
 ## Testes
 
@@ -237,6 +269,6 @@ documentação, não de verificação direta, e estão marcados com `TODO` no fo
 - `IntegrationPlatformClient:DoRequest()` — se o retorno lógico de
   `FWRest:Get/Post/Put` já distingue 2xx de 4xx/5xx, e se `cResult` é mesmo a
   propriedade do corpo da resposta nesta build.
-- `CENTINTEG:BuildOne()` — posição de `lPixel` nos construtores de `TCheckBox` e
+- `CTIA001:BuildOne()` — posição de `lPixel` nos construtores de `TCheckBox` e
   `TButton`, e a propriedade `oGet:lPassword`. `TGet` (com `lPixel` na posição 14),
   `TSay` e `TScrollBox` seguem assinatura conferida na documentação.
