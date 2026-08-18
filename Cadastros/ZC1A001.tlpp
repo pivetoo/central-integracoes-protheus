@@ -1,8 +1,8 @@
 #include "protheus.ch"
 
-namespace custom.cti.zc1a001
-
-// Launcher de menu da rotina Smart X ZC1A001 (Referencia de Conector por Finalidade).
+// Sem namespace de proposito: User Function dentro de namespace nao se registra
+// como U_NOME global e o menu nao consegue chamar. O Model e a Interface mantem
+// o namespace deles e sao referenciados pelo nome completo.
 User Function ZC1A001()
     Local oLauncher as Object
 
